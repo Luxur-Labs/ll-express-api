@@ -98,3 +98,20 @@ npm test
 Import `postman_collection.json`. Set variables:
 - `baseUrl`: `http://localhost:3000/api/v1`
 - `token`: set after login
+
+## Documentation
+Comprehensive documentation is available in the `/docs` folder:
+- **[Security Overview](./docs/security/SECURITY_OVERVIEW.md)** - Complete security features documentation
+- **[Security Testing Guide](./docs/security/TESTING_GUIDE.md)** - Testing procedures and scripts
+- **[Documentation Index](./docs/README.md)** - Full documentation index
+
+## Security Features
+The API includes enterprise-grade security:
+- ✅ IP-based rate limiting (5 login attempts per 15 minutes)
+- ✅ Account lockout system (5 failed attempts = 30 min lockout)
+- ✅ Timing attack prevention (random delays)
+- ✅ User enumeration prevention
+- ✅ Security logging and audit trail
+- ✅ IP address tracking
+
+See [Security Overview](./docs/security/SECURITY_OVERVIEW.md) for details.
