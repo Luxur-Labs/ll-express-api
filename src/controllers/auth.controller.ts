@@ -83,6 +83,27 @@ export function meController(req: Request, res: Response) {
   return res.json({ user });
 }
 
+export function logoutController(req: Request, res: Response) {
+  // Since JWT is stateless, logout is mainly client-side
+  // But we can log the logout event for security purposes
+  const user = res.locals.user;
+  const clientIp = getClientIp(req);
+  
+  if (user) {
+    logger.info({ 
+      userId: user.id, 
+      email: user.email, 
+      ip: clientIp 
+    }, 'User logout');
+  }
+  
+  // Return success - client should remove token from storage
+  return res.json({ 
+    message: 'Logged out successfully',
+    logoutAt: new Date().toISOString()
+  });
+}
+
 export async function forgotPasswordController(req: Request, res: Response) {
   const { email } = req.body as Partial<{ email: string }>;
   if (!email) return res.status(400).json({ message: 'email is required' });

@@ -1,7 +1,7 @@
 import { Router } from 'express';
  
 import { addEmployeeTypeController, addTechnicianGroupController, listTypesController } from '../controllers/admin.controller';
-import { loginController, meController, forgotPasswordController } from '../controllers/auth.controller';
+import { loginController, meController, forgotPasswordController, logoutController } from '../controllers/auth.controller';
 import { validate } from '../middleware/validate.middleware';
 import { loginSchema, forgotPasswordSchema } from '../schemas/auth.schema';
 import { healthController } from '../controllers/health.controller'; 
@@ -15,6 +15,7 @@ router.get('/health', healthController);
 
 // Auth routes with rate limiting
 router.post('/auth/login', authRateLimiter, speedLimiter, validate(loginSchema), loginController);
+router.post('/auth/logout', authenticate, logoutController);
 router.post('/auth/forgot-password', forgotPasswordRateLimiter, validate(forgotPasswordSchema), forgotPasswordController);
 router.get('/auth/me', authenticate, meController);
 

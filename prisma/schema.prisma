@@ -20,8 +20,9 @@ model User {
   role                  Role
   employeeType          EmployeeType?     @relation(fields: [employeeTypeId], references: [id])
   employeeTypeId        String?
-  technicianGroup       TechnicianGroup?  @relation(fields: [technicianGroupId], references: [id])
+  technicianGroup       TechnicianGroup?  @relation("GroupMembers", fields: [technicianGroupId], references: [id])
   technicianGroupId     String?
+  leadingGroup          TechnicianGroup?  @relation("GroupLeader")
   
   // Security fields
   failedLoginAttempts   Int               @default(0)
@@ -40,9 +41,11 @@ model EmployeeType {
 }
 
 model TechnicianGroup {
-  id    String  @id @default(uuid())
-  name  String  @unique
-  users User[]
+  id        String  @id @default(uuid())
+  name      String  @unique
+  leaderId  String? @unique
+  leader    User?   @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  members   User[]  @relation("GroupMembers")
 }
 
 
