@@ -29,6 +29,13 @@ model User {
   accountLockedUntil    DateTime?
   lastLoginAt           DateTime?
   lastLoginIp           String?
+
+  // Profile fields
+  fullName              String?
+  dateOfBirth           DateTime?
+  contact               String?
+  document              String?
+  profilePhoto          String?
   
   // Relations
   ordersAsDoctor        Order[]           @relation("OrderDoctor")
@@ -47,6 +54,7 @@ model EmployeeType {
 model TechnicianGroup {
   id        String  @id @default(uuid())
   name      String  @unique
+  description String?
   leaderId  String? @unique
   leader    User?   @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
   members   User[]  @relation("GroupMembers")

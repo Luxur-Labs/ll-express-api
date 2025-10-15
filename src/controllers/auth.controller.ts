@@ -69,6 +69,10 @@ export async function loginController(req: Request, res: Response) {
         employeeType: user.employeeType?.name,
         technicianGroup: user.technicianGroup?.name,
         lastLoginAt: user.lastLoginAt,
+        fullName: (user as any).fullName ?? null,
+        dateOfBirth: (user as any).dateOfBirth ?? null,
+        contact: (user as any).contact ?? null,
+        profilePhoto: (user as any).profilePhoto ?? null,
       }
     });
   } catch (error) {

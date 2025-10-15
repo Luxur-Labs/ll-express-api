@@ -1,6 +1,7 @@
 import cors from 'cors'; 
 import express from 'express'; 
 import helmet from 'helmet';
+import path from 'path';
  
 import { errorHandler } from '../middleware/error.middleware'; 
 import { notFound } from '../middleware/notFound.middleware'; 
@@ -26,6 +27,8 @@ export function createApp() {
   
   // Body parsing
   app.use(express.json()); 
+  // Static serving for uploaded assets (local CDN simulation)
+  app.use('/static', express.static(path.resolve('uploads')));
   
   // Request logging
   app.use(requestLogger); 

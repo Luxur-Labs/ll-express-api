@@ -1,4 +1,5 @@
 import { Role } from '../types/auth';
+import { uploadToCdn } from '../utils/cdn';
 
 import { hashPassword } from '../utils/password';
 import { prisma } from '../utils/prisma';
@@ -11,29 +12,78 @@ export async function listUsers() {
   return prisma.user.findMany({ include: { employeeType: true, technicianGroup: true } });
 }
 
+export async function listEmployees(filter?: { employeeTypeName?: string }) {
+  const where: any = { role: 'EMPLOYEE' };
+  if (filter?.employeeTypeName) {
+    where.employeeType = { name: filter.employeeTypeName };
+  }
+  return prisma.user.findMany({ where, include: { employeeType: true, technicianGroup: true } });
+}
+
 export async function createUser(input: {
   email: string;
   password: string;
   role: Role;
   employeeTypeName?: string | null;
   technicianGroupName?: string | null;
+  fullName?: string | null;
+  dateOfBirth?: string | null; // ISO string expected from client
+  contact?: string | null;
+  documentFile?: Express.Multer.File | undefined;
+  profilePhotoFile?: Express.Multer.File | undefined;
+  publicBaseUrl?: string | undefined;
 }) {
   const passwordHash = await hashPassword(input.password);
 
   const [employeeType, technicianGroup] = await Promise.all([
-    input.employeeTypeName ? prisma.employeeType.upsert({ where: { name: input.employeeTypeName }, update: {}, create: { name: input.employeeTypeName } }) : Promise.resolve(null),
-    input.technicianGroupName ? prisma.technicianGroup.upsert({ where: { name: input.technicianGroupName }, update: {}, create: { name: input.technicianGroupName } }) : Promise.resolve(null),
+    input.employeeTypeName
+      ? prisma.employeeType.upsert({ where: { name: input.employeeTypeName }, update: {}, create: { name: input.employeeTypeName } })
+      : Promise.resolve(null),
+    // IMPORTANT: Do NOT create a technician group by default; only link if it already exists
+    input.technicianGroupName
+      ? prisma.technicianGroup.findUnique({ where: { name: input.technicianGroupName } })
+      : Promise.resolve(null),
   ]);
 
-  return prisma.user.create({
-    data: {
-      email: input.email,
-      passwordHash,
-      role: input.role,
-      employeeTypeId: employeeType?.id ?? null,
-      technicianGroupId: technicianGroup?.id ?? null,
-    }
-  });
+  // Upload files to CDN (local simulation). Optional.
+  let documentUrl: string | null = null;
+  let profilePhotoUrl: string | null = null;
+  if (input.documentFile) {
+    documentUrl = await uploadToCdn({
+      buffer: input.documentFile.buffer,
+      mimetype: input.documentFile.mimetype,
+      originalname: input.documentFile.originalname,
+    });
+  }
+  if (input.profilePhotoFile) {
+    profilePhotoUrl = await uploadToCdn({
+      buffer: input.profilePhotoFile.buffer,
+      mimetype: input.profilePhotoFile.mimetype,
+      originalname: input.profilePhotoFile.originalname,
+    });
+  }
+
+  // Prefix with absolute base URL if provided
+  if (input.publicBaseUrl) {
+    if (documentUrl && documentUrl.startsWith('/')) documentUrl = `${input.publicBaseUrl}${documentUrl}`;
+    if (profilePhotoUrl && profilePhotoUrl.startsWith('/')) profilePhotoUrl = `${input.publicBaseUrl}${profilePhotoUrl}`;
+  }
+
+  const data: any = {
+    email: input.email,
+    passwordHash,
+    role: input.role,
+    employeeTypeId: employeeType?.id ?? null,
+    // Only set technicianGroupId if an existing group was found and explicitly provided
+    ...(technicianGroup?.id ? { technicianGroupId: technicianGroup.id } : {}),
+    fullName: input.fullName ?? null,
+    dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
+    contact: input.contact ?? null,
+    document: documentUrl,
+    profilePhoto: profilePhotoUrl,
+  };
+
+  return prisma.user.create({ data });
 }
 
 export async function updateUser(id: string, input: Partial<{ email: string; password: string; role: Role; employeeTypeName: string | null; technicianGroupName: string | null }>) {
