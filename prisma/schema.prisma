@@ -48,4 +48,25 @@ model TechnicianGroup {
   members   User[]  @relation("GroupMembers")
 }
 
+model Clinic {
+  id              String   @id @default(uuid())
+  clinicName      String
+  organizationId  String
+  clientAddress   String
+  contactNumber   String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  workType    String
+  product     String
+  warranty    String
+  price       Decimal  @db.Decimal(10, 2)
+  discount    Decimal  @db.Decimal(5, 2) @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 

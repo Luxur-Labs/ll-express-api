@@ -8,7 +8,5 @@ export const validate = (schema: ZodTypeAny) => (req: Request, res: Response, ne
   }
   const data = result.data as { body?: unknown; query?: unknown; params?: unknown };
   if (data.body) req.body = data.body as any;
-  if (data.query) req.query = data.query as any;
-  if (data.params) req.params = data.params as any;
   next();
 };

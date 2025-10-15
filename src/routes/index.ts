@@ -2,12 +2,15 @@ import { Router } from 'express';
  
 import { addEmployeeTypeController, addTechnicianGroupController, listTypesController } from '../controllers/admin.controller';
 import { loginController, meController, forgotPasswordController, logoutController } from '../controllers/auth.controller';
-import { validate } from '../middleware/validate.middleware';
-import { loginSchema, forgotPasswordSchema } from '../schemas/auth.schema';
 import { healthController } from '../controllers/health.controller'; 
 import { listUsersController, createUserController, updateUserController, deleteUserController } from '../controllers/user.controller';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
 import { authRateLimiter, speedLimiter, forgotPasswordRateLimiter } from '../middleware/rateLimiter.middleware';
+import { validate } from '../middleware/validate.middleware';
+import { loginSchema, forgotPasswordSchema } from '../schemas/auth.schema';
+
+import clinicRoutes from './clinic.routes';
+import productRoutes from './product.routes';
  
 const router = Router(); 
  
@@ -29,5 +32,11 @@ router.get('/users', authenticate, authorizeRoles('SUPER_ADMIN'), listUsersContr
 router.post('/users', authenticate, authorizeRoles('SUPER_ADMIN'), createUserController);
 router.put('/users/:id', authenticate, authorizeRoles('SUPER_ADMIN'), updateUserController);
 router.delete('/users/:id', authenticate, authorizeRoles('SUPER_ADMIN'), deleteUserController);
+
+// Clinics (SUPER_ADMIN)
+router.use('/clinics', clinicRoutes);
+
+// Products (SUPER_ADMIN)
+router.use('/products', productRoutes);
  
 export default router;
