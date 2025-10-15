@@ -69,4 +69,14 @@ model Product {
   updatedAt   DateTime @updatedAt
 }
 
+model Patient {
+  id            String   @id @default(uuid())
+  name          String
+  age           Int
+  gender        String
+  contactNumber String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 

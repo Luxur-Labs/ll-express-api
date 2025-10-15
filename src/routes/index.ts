@@ -11,6 +11,7 @@ import { loginSchema, forgotPasswordSchema } from '../schemas/auth.schema';
 
 import clinicRoutes from './clinic.routes';
 import productRoutes from './product.routes';
+import patientRoutes from './patient.routes';
  
 const router = Router(); 
  
@@ -38,5 +39,8 @@ router.use('/clinics', clinicRoutes);
 
 // Products (SUPER_ADMIN)
 router.use('/products', productRoutes);
+
+// Patients (SUPER_ADMIN)
+router.use('/patients', patientRoutes);
  
 export default router;
