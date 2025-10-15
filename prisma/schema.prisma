@@ -30,6 +30,10 @@ model User {
   lastLoginAt           DateTime?
   lastLoginIp           String?
   
+  // Relations
+  ordersAsDoctor        Order[]           @relation("OrderDoctor")
+  ordersAsReferredDoctor Order[]          @relation("OrderReferredDoctor")
+  
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
 }
@@ -54,6 +58,10 @@ model Clinic {
   organizationId  String
   clientAddress   String
   contactNumber   String
+  
+  // Relations
+  orders          Order[]
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
@@ -65,6 +73,10 @@ model Product {
   warranty    String
   price       Decimal  @db.Decimal(10, 2)
   discount    Decimal  @db.Decimal(5, 2) @default(0)
+  
+  // Relations
+  orderProducts OrderProduct[]
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -75,8 +87,69 @@ model Patient {
   age           Int
   gender        String
   contactNumber String
+  
+  // Relations
+  orders        Order[]
+  
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model Order {
+  id              String   @id @default(uuid())
+  invoiceNumber   String   @unique
+  
+  // Relations
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId       String
+  
+  doctor          User     @relation("OrderDoctor", fields: [doctorId], references: [id], onDelete: Cascade)
+  doctorId        String
+  
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinicId        String
+  
+  referredDoctor  User?    @relation("OrderReferredDoctor", fields: [referredDoctorId], references: [id], onDelete: SetNull)
+  referredDoctorId String?
+  
+  // Additional fields
+  partner         String
+  scanningMode    String
+  schedule        DateTime
+  enterRemark     String
+  estimateDate    DateTime
+  dateOfApproach  DateTime
+  
+  // Relations
+  orderProducts   OrderProduct[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model OrderProduct {
+  id                    String   @id @default(uuid())
+  
+  // Relations
+  order                 Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId               String
+  
+  product               Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId             String?
+  
+  // Order product specific fields
+  workSpecification     String
+  shadeType             String
+  finishingInstructions String
+  componentDetails      String
+  incaseOfAllAbutments  String
+  occlusalStaining      String
+  ponticDesign          String
+  repeatCorrections     String
+  enterReason           String
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 
