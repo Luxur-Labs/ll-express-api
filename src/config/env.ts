@@ -24,6 +24,12 @@ const envSchema = z.object({
   BETTERAUTH_BASE_URL: z.string().url().optional(),
   BETTERAUTH_API_TOKEN: z.string().optional(),
   BETTERAUTH_FORGOT_PATH: z.string().default('/api/auth/forgot-password'),
+  // AWS S3 configuration
+  AWS_REGION: z.string().optional(),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_BUCKET_NAME: z.string().optional(),
+  S3_PUBLIC_URL: z.string().url().optional(),
 }); 
  
 const parsed = envSchema.safeParse(process.env); 
