@@ -1,7 +1,8 @@
 import { prisma } from '../utils/prisma';
 
 export interface CreateOrderProductData {
-  productId?: string;
+  productId: string;
+  workType: string;
   workSpecification: string;
   shadeType: string;
   finishingInstructions: string;
@@ -11,6 +12,18 @@ export interface CreateOrderProductData {
   ponticDesign: string;
   repeatCorrections: string;
   enterReason: string;
+  unitNumbers?: string;
+}
+
+export interface CreateFileData {
+  fileName: string;
+  fileSize?: number;
+  fileType?: string;
+  fileExtension?: string;
+  s3Key: string;
+  fileCategory?: string;
+  fileDescription?: string;
+  uploadedBy?: string;
 }
 
 export interface CreateOrderData {
@@ -26,6 +39,7 @@ export interface CreateOrderData {
   estimateDate: Date;
   dateOfApproach: Date;
   orderProducts: CreateOrderProductData[];
+  files?: CreateFileData[];
 }
 
 export interface UpdateOrderData {
@@ -60,6 +74,7 @@ export class OrderService {
         orderProducts: {
           create: data.orderProducts.map(product => ({
             productId: product.productId,
+            workType: product.workType,
             workSpecification: product.workSpecification,
             shadeType: product.shadeType,
             finishingInstructions: product.finishingInstructions,
@@ -69,8 +84,21 @@ export class OrderService {
             ponticDesign: product.ponticDesign,
             repeatCorrections: product.repeatCorrections,
             enterReason: product.enterReason,
+            unitNumbers: product.unitNumbers,
           }))
-        }
+        },
+        files: data.files ? {
+          create: data.files.map(file => ({
+            fileName: file.fileName,
+            fileSize: file.fileSize ? BigInt(file.fileSize) : null,
+            fileType: file.fileType,
+            fileExtension: file.fileExtension,
+            s3Key: file.s3Key,
+            fileCategory: file.fileCategory,
+            fileDescription: file.fileDescription,
+            uploadedBy: file.uploadedBy,
+          }))
+        } : undefined,
       },
       include: {
         patient: true,
@@ -82,6 +110,7 @@ export class OrderService {
             product: true,
           }
         },
+        files: true,
       },
     });
   }
@@ -99,6 +128,7 @@ export class OrderService {
             product: true,
           }
         },
+        files: true,
       },
     });
   }
@@ -132,6 +162,7 @@ export class OrderService {
             product: true,
           }
         },
+        files: true,
       },
       orderBy: { createdAt: 'desc' },
     });

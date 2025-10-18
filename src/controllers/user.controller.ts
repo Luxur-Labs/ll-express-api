@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 
-import { createUser, deleteUser, listEmployees, listUsers, updateUser } from '../services/user.service';
+import { createUser, deleteUser, listEmployees, listUsers, updateUser, getDoctorsList } from '../services/user.service';
 import { Role } from '../types/auth';
 
 export async function listUsersController(req: Request, res: Response) {
@@ -76,6 +76,16 @@ export async function deleteUserController(req: Request, res: Response) {
   const { id } = req.params as { id: string };
   await deleteUser(id);
   return res.status(204).send();
+}
+
+export async function getDoctorsListController(req: Request, res: Response) {
+  try {
+    const doctors = await getDoctorsList();
+    return res.json(doctors);
+  } catch (error) {
+    console.error('Error fetching doctors list:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
 }
 
 

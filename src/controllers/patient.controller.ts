@@ -179,3 +179,13 @@ export async function searchPatientsByNameController(req: Request, res: Response
     return res.status(500).json({ message: 'Internal server error' });
   }
 }
+
+export async function getPatientsListController(req: Request, res: Response) {
+  try {
+    const patients = await patientService.getPatientsList();
+    return res.json(patients);
+  } catch (error) {
+    console.error('Error fetching patients list:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}

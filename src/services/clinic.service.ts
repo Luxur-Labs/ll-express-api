@@ -52,4 +52,17 @@ export class ClinicService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  async getClinicsList() {
+    return await prisma.clinic.findMany({
+      select: {
+        id: true,
+        clinicName: true,
+        clientAddress: true,
+        contactNumber: true,
+        organizationId: true,
+      },
+      orderBy: { clinicName: 'asc' },
+    });
+  }
 }

@@ -115,4 +115,24 @@ export async function deleteUser(id: string) {
   return prisma.user.delete({ where: { id } });
 }
 
+export async function getDoctorsList(searchQuery?: string) {
+  const whereClause: any = { role: 'DOCTOR' };
+  
+  if (searchQuery && searchQuery.trim()) {
+    whereClause.name = {
+      contains: searchQuery.trim(),
+      mode: 'insensitive'
+    };
+  }
+
+  return await prisma.user.findMany({
+    where: whereClause,
+    select: {
+      id: true,
+      name: true,
+    },
+    orderBy: { name: 'asc' },
+  });
+}
+
 

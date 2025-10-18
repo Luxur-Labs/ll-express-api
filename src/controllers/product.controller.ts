@@ -5,11 +5,11 @@ const productService = new ProductService();
 
 export async function createProductController(req: Request, res: Response) {
   try {
-    const { workType, product, warranty, price, discount } = req.body;
+    const { product, warranty, price, discount } = req.body;
 
-    if (!workType || !product || !warranty || price === undefined) {
+    if (!product || !warranty || price === undefined) {
       return res.status(400).json({
-        message: 'workType, product, warranty, and price are required'
+        message: 'product, warranty, and price are required'
       });
     }
 
@@ -26,7 +26,6 @@ export async function createProductController(req: Request, res: Response) {
     }
 
     const productData: CreateProductData = {
-      workType,
       product,
       warranty,
       price,
@@ -75,7 +74,7 @@ export async function getAllProductsController(req: Request, res: Response) {
 export async function updateProductController(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const { workType, product, warranty, price, discount } = req.body;
+    const { product, warranty, price, discount } = req.body;
 
     if (!id) {
       return res.status(400).json({ message: 'Product ID is required' });
@@ -102,7 +101,6 @@ export async function updateProductController(req: Request, res: Response) {
     }
 
     const updateData: UpdateProductData = {};
-    if (workType !== undefined) updateData.workType = workType;
     if (product !== undefined) updateData.product = product;
     if (warranty !== undefined) updateData.warranty = warranty;
     if (price !== undefined) updateData.price = price;
@@ -138,21 +136,6 @@ export async function deleteProductController(req: Request, res: Response) {
   }
 }
 
-export async function getProductsByWorkTypeController(req: Request, res: Response) {
-  try {
-    const { workType } = req.params;
-
-    if (!workType) {
-      return res.status(400).json({ message: 'Work type is required' });
-    }
-
-    const products = await productService.getProductsByWorkType(workType);
-    return res.json(products);
-  } catch (error) {
-    console.error('Error fetching products by work type:', error);
-    return res.status(500).json({ message: 'Internal server error' });
-  }
-}
 
 export async function getProductsByPriceRangeController(req: Request, res: Response) {
   try {
@@ -175,6 +158,16 @@ export async function getProductsByPriceRangeController(req: Request, res: Respo
     return res.json(products);
   } catch (error) {
     console.error('Error fetching products by price range:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+export async function getProductsListController(req: Request, res: Response) {
+  try {
+    const products = await productService.getProductsList();
+    return res.json(products);
+  } catch (error) {
+    console.error('Error fetching products list:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }

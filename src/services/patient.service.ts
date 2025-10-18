@@ -76,4 +76,16 @@ export class PatientService {
       orderBy: { name: 'asc' },
     });
   }
+
+  async getPatientsList() {
+    return await prisma.patient.findMany({
+      select: {
+        id: true,
+        name: true,
+        age: true,
+        gender: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
 }

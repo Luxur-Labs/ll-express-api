@@ -6,8 +6,8 @@ import {
   getAllProductsController,
   updateProductController,
   deleteProductController,
-  getProductsByWorkTypeController,
   getProductsByPriceRangeController,
+  getProductsListController,
 } from '../controllers/product.controller';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
@@ -22,7 +22,7 @@ router.use(authorizeRoles('SUPER_ADMIN'));
 // CRUD operations for products
 router.post('/', validate(createProductSchema), createProductController);
 router.get('/', getAllProductsController);
-router.get('/work-type/:workType', getProductsByWorkTypeController);
+router.get('/list', getProductsListController);
 router.get('/price-range', validate(priceRangeQuerySchema), getProductsByPriceRangeController);
 router.get('/:id', getProductByIdController);
 router.put('/:id', validate(updateProductSchema), updateProductController);

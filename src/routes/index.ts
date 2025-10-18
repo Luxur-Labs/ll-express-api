@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { addEmployeeTypeController, addTechnicianGroupController, listEmployeeTypesController, listTechnicianGroupsController } from '../controllers/admin.controller';
 import { loginController, meController, forgotPasswordController, logoutController } from '../controllers/auth.controller';
 import { healthController } from '../controllers/health.controller'; 
-import { listUsersController, listEmployeesController, createUserController, updateUserController, deleteUserController } from '../controllers/user.controller';
+import { listUsersController, listEmployeesController, createUserController, updateUserController, deleteUserController, getDoctorsListController } from '../controllers/user.controller';
 import multer from 'multer';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
 import { authRateLimiter, speedLimiter, forgotPasswordRateLimiter } from '../middleware/rateLimiter.middleware';
@@ -48,6 +48,9 @@ router.post(
 );
 router.put('/users/:id', authenticate, authorizeRoles('SUPER_ADMIN'), updateUserController);
 router.delete('/users/:id', authenticate, authorizeRoles('SUPER_ADMIN'), deleteUserController);
+
+// Doctors (SUPER_ADMIN)
+router.get('/doctors/list', authenticate, authorizeRoles('SUPER_ADMIN'), getDoctorsListController);
 
 // Clinics (SUPER_ADMIN)
 router.use('/clinics', clinicRoutes);

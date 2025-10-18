@@ -17,7 +17,8 @@ export async function createOrderController(req: Request, res: Response) {
       enterRemark,
       estimateDate,
       dateOfApproach,
-      orderProducts
+      orderProducts,
+      files
     } = req.body;
 
     if (!invoiceNumber || !patientId || !doctorId || !clinicId || !partner || 
@@ -30,12 +31,23 @@ export async function createOrderController(req: Request, res: Response) {
 
     // Validate each order product
     for (const product of orderProducts) {
-      if (!product.workSpecification || !product.shadeType || !product.finishingInstructions ||
+      if (!product.productId || !product.workType || !product.workSpecification || !product.shadeType || !product.finishingInstructions ||
           !product.componentDetails || !product.incaseOfAllAbutments || !product.occlusalStaining ||
           !product.ponticDesign || !product.repeatCorrections || !product.enterReason) {
         return res.status(400).json({
-          message: 'Each order product must have all required fields: workSpecification, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason'
+          message: 'Each order product must have all required fields: productId, workType, workSpecification, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason'
         });
+      }
+    }
+
+    // Validate files if provided
+    if (files && Array.isArray(files)) {
+      for (const file of files) {
+        if (!file.fileName || !file.s3Key) {
+          return res.status(400).json({
+            message: 'Each file must have fileName and s3Key'
+          });
+        }
       }
     }
 
@@ -52,10 +64,11 @@ export async function createOrderController(req: Request, res: Response) {
       estimateDate: new Date(estimateDate),
       dateOfApproach: new Date(dateOfApproach),
       orderProducts,
+      files,
     };
 
-    const order = await orderService.createOrder(orderData);
-    return res.status(201).json(order);
+    await orderService.createOrder(orderData);
+    return res.status(201).json({ message: 'Created order successfully' });
   } catch (error) {
     console.error('Error creating order:', error);
     return res.status(500).json({ message: 'Internal server error' });

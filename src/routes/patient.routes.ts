@@ -9,6 +9,7 @@ import {
   getPatientsByGenderController,
   getPatientsByAgeRangeController,
   searchPatientsByNameController,
+  getPatientsListController,
 } from '../controllers/patient.controller';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
@@ -23,6 +24,7 @@ router.use(authorizeRoles('SUPER_ADMIN'));
 // CRUD operations for patients
 router.post('/', validate(createPatientSchema), createPatientController);
 router.get('/', getAllPatientsController);
+router.get('/list', getPatientsListController);
 router.get('/search', validate(searchByNameQuerySchema), searchPatientsByNameController);
 router.get('/gender/:gender', getPatientsByGenderController);
 router.get('/age-range', validate(ageRangeQuerySchema), getPatientsByAgeRangeController);

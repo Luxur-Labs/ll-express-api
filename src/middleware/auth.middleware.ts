@@ -4,11 +4,22 @@ import { verifyToken } from '../services/auth.service';
 import { Role, EmployeeType, TechnicianGroup, AuthUser } from '../types/auth';
 
 export function authenticate(req: Request, res: Response, next: NextFunction) {
+  let token: string | undefined;
+  
+  // Check for Authorization header first (Bearer token)
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Missing or invalid Authorization header' });
+  if (authHeader?.startsWith('Bearer ')) {
+    token = authHeader.substring('Bearer '.length);
   }
-  const token = authHeader.substring('Bearer '.length);
+  // Check for custom token header
+  else if (req.headers.token && typeof req.headers.token === 'string') {
+    token = req.headers.token;
+  }
+  
+  if (!token) {
+    return res.status(401).json({ message: 'Missing or invalid token' });
+  }
+  
   try {
     const user = verifyToken(token);
     res.locals.user = user;

@@ -125,3 +125,13 @@ export async function getClinicsByOrganizationController(req: Request, res: Resp
     return res.status(500).json({ message: 'Internal server error' });
   }
 }
+
+export async function getClinicsListController(req: Request, res: Response) {
+  try {
+    const clinics = await clinicService.getClinicsList();
+    return res.json(clinics);
+  } catch (error) {
+    console.error('Error fetching clinics list:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}

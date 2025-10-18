@@ -16,6 +16,7 @@ enum Role {
 model User {
   id                    String            @id @default(uuid())
   email                 String            @unique
+  name                  String?
   passwordHash          String
   role                  Role
   employeeType          EmployeeType?     @relation(fields: [employeeTypeId], references: [id])
@@ -76,7 +77,6 @@ model Clinic {
 
 model Product {
   id          String   @id @default(uuid())
-  workType    String
   product     String
   warranty    String
   price       Decimal  @db.Decimal(10, 2)
@@ -130,6 +130,7 @@ model Order {
   
   // Relations
   orderProducts   OrderProduct[]
+  files           File[]
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -142,10 +143,11 @@ model OrderProduct {
   order                 Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId               String
   
-  product               Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  productId             String?
+  product               Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId             String
   
   // Order product specific fields
+  workType              String
   workSpecification     String
   shadeType             String
   finishingInstructions String
@@ -155,9 +157,41 @@ model OrderProduct {
   ponticDesign          String
   repeatCorrections     String
   enterReason           String
+  unitNumbers           String?
   
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+model File {
+  id              String   @id @default(uuid())
+  
+  // Essential file data
+  fileName        String
+  fileSize        BigInt?
+  fileType        String?
+  fileExtension   String?
+  
+  // S3 storage
+  s3Key           String
+  
+  // File categorization
+  fileCategory    String?
+  fileDescription String?
+  
+  // Upload metadata
+  uploadDate      DateTime @default(now())
+  uploadedBy      String?
+  
+  // Polymorphic relations
+  orderId         String?
+  order           Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  // Status
+  isActive        Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 

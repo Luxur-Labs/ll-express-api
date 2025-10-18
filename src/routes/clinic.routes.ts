@@ -7,6 +7,7 @@ import {
   updateClinicController,
   deleteClinicController,
   getClinicsByOrganizationController,
+  getClinicsListController,
 } from '../controllers/clinic.controller';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
@@ -21,6 +22,7 @@ router.use(authorizeRoles('SUPER_ADMIN'));
 // CRUD operations for clinics
 router.post('/', validate(createClinicSchema), createClinicController);
 router.get('/', getAllClinicsController);
+router.get('/list', getClinicsListController);
 router.get('/organization/:organizationId', getClinicsByOrganizationController);
 router.get('/:id', getClinicByIdController);
 router.put('/:id', validate(updateClinicSchema), updateClinicController);
