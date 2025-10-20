@@ -1,6 +1,6 @@
 import { Router } from 'express';
  
-import { addEmployeeTypeController, addTechnicianGroupController, listEmployeeTypesController, listTechnicianGroupsController } from '../controllers/admin.controller';
+import { addEmployeeTypeController, addTechnicianGroupController, listEmployeeTypesController, listTechnicianGroupsController, updateTechnicianGroupController, deleteTechnicianGroupController } from '../controllers/admin.controller';
 import { loginController, meController, forgotPasswordController, logoutController } from '../controllers/auth.controller';
 import { healthController } from '../controllers/health.controller'; 
 import { listUsersController, listEmployeesController, createUserController, updateUserController, deleteUserController, getDoctorsListController } from '../controllers/user.controller';
@@ -8,7 +8,7 @@ import multer from 'multer';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
 import { authRateLimiter, speedLimiter, forgotPasswordRateLimiter } from '../middleware/rateLimiter.middleware';
 import { validate } from '../middleware/validate.middleware';
-import { loginSchema, forgotPasswordSchema, updateUserSchema } from '../schemas/auth.schema';
+import { loginSchema, forgotPasswordSchema, updateUserSchema, updateTechnicianGroupSchema, deleteTechnicianGroupSchema } from '../schemas/auth.schema';
 
 import clinicRoutes from './clinic.routes';
 import productRoutes from './product.routes';
@@ -32,6 +32,8 @@ router.get('/admin/employee-types', authenticate, authorizeRoles('SUPER_ADMIN'),
 router.get('/admin/technician-groups', authenticate, authorizeRoles('SUPER_ADMIN'), listTechnicianGroupsController);
 router.post('/admin/employee-types', authenticate, authorizeRoles('SUPER_ADMIN'), addEmployeeTypeController);
 router.post('/admin/technician-groups', authenticate, authorizeRoles('SUPER_ADMIN'), addTechnicianGroupController);
+router.put('/admin/technician-groups/:id', authenticate, authorizeRoles('SUPER_ADMIN'), upload.none(), validate(updateTechnicianGroupSchema), updateTechnicianGroupController);
+router.delete('/admin/technician-groups/:id', authenticate, authorizeRoles('SUPER_ADMIN'), validate(deleteTechnicianGroupSchema), deleteTechnicianGroupController);
 
 // Users (SUPER_ADMIN)
 router.get('/users', authenticate, authorizeRoles('SUPER_ADMIN'), listUsersController);

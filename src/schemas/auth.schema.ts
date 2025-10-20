@@ -29,3 +29,21 @@ export const updateUserSchema = z.object({
     id: z.string().uuid('Invalid user ID format'),
   }),
 });
+
+export const updateTechnicianGroupSchema = z.object({
+  body: z.object({
+    group: z.string().optional(),
+    description: z.string().nullable().optional(),
+    leaderId: z.string().uuid('Invalid leader ID format').nullable().optional(),
+    memberIds: z.array(z.string().uuid('Invalid member ID format')).optional(),
+  }),
+  params: z.object({
+    id: z.string().uuid('Invalid technician group ID format'),
+  }),
+});
+
+export const deleteTechnicianGroupSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid technician group ID format'),
+  }),
+});
