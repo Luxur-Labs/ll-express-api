@@ -5,6 +5,7 @@ import {
   getOrderByIdController,
   getOrderByInvoiceNumberController,
   getAllOrdersController,
+  getOrdersListController,
   updateOrderController,
   deleteOrderController,
   getOrdersByPatientController,
@@ -27,6 +28,7 @@ router.use(authorizeRoles('SUPER_ADMIN'));
 // CRUD operations for orders
 router.post('/', validate(createOrderSchema), createOrderController);
 router.get('/', getAllOrdersController);
+router.get('/list', getOrdersListController);
 router.get('/invoice/:invoiceNumber', getOrderByInvoiceNumberController);
 router.get('/patient/:patientId', getOrdersByPatientController);
 router.get('/doctor/:doctorId', getOrdersByDoctorController);

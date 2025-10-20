@@ -4,7 +4,7 @@ export interface CreatePatientData {
   name: string;
   age: number;
   gender: string;
-  contactNumber: string;
+  contactNumber?: string;
 }
 
 export interface UpdatePatientData {

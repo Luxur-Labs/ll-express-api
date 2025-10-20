@@ -117,6 +117,25 @@ export async function getOrderByInvoiceNumberController(req: Request, res: Respo
   }
 }
 
+export async function getOrdersListController(req: Request, res: Response) {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    if (page < 1 || limit < 1 || limit > 100) {
+      return res.status(400).json({ 
+        message: 'Invalid pagination parameters. Page must be >= 1, limit must be between 1 and 100' 
+      });
+    }
+
+    const result = await orderService.getOrdersList(page, limit);
+    return res.json({ data: result });
+  } catch (error) {
+    console.error('Error fetching orders list:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
 export async function getAllOrdersController(req: Request, res: Response) {
   try {
     const orders = await orderService.getAllOrders();

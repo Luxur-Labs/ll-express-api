@@ -94,7 +94,7 @@ model Patient {
   name          String
   age           Int
   gender        String
-  contactNumber String
+  contactNumber String?
   
   // Relations
   orders        Order[]

@@ -5,7 +5,7 @@ export const createPatientSchema = z.object({
     name: z.string().min(1, 'Name is required').max(255, 'Name too long'),
     age: z.number().int('Age must be an integer').min(0, 'Age cannot be negative').max(150, 'Age cannot exceed 150'),
     gender: z.string().min(1, 'Gender is required').max(50, 'Gender too long'),
-    contactNumber: z.string().min(1, 'Contact number is required').max(20, 'Contact number too long'),
+    contactNumber: z.string().max(20, 'Contact number too long').optional(),
   }),
   query: z.object({}).optional(),
   params: z.object({}).optional(),

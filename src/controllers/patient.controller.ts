@@ -7,9 +7,9 @@ export async function createPatientController(req: Request, res: Response) {
   try {
     const { name, age, gender, contactNumber } = req.body;
 
-    if (!name || age === undefined || !gender || !contactNumber) {
+    if (!name || age === undefined || !gender) {
       return res.status(400).json({
-        message: 'name, age, gender, and contactNumber are required'
+        message: 'name, age, and gender are required'
       });
     }
 
@@ -26,8 +26,8 @@ export async function createPatientController(req: Request, res: Response) {
       contactNumber,
     };
 
-    const patient = await patientService.createPatient(patientData);
-    return res.status(201).json(patient);
+    await patientService.createPatient(patientData);
+    return res.status(201).json({ message: 'Patient created successfully' });
   } catch (error) {
     console.error('Error creating patient:', error);
     return res.status(500).json({ message: 'Internal server error' });
