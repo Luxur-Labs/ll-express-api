@@ -6,7 +6,7 @@ import { Role } from '../types/auth';
 export async function listUsersController(req: Request, res: Response) {
   const users = await listUsers();
   const result = users.map((u: any) => ({
-    fullName: u.fullName ?? null,
+    name: u.name ?? null,
     dateOfBirth: u.dateOfBirth ?? null,
     Contact: u.contact ?? null,
     UserType: u.employeeType?.name ?? null,
@@ -22,7 +22,7 @@ export async function listEmployeesController(req: Request, res: Response) {
   const users = await listEmployees(employeeTypeName ? { employeeTypeName } : undefined);
   const result = users.map((u: any) => ({
     id: u.id,
-    fullName: u.fullName ?? null,
+    name: u.name ?? null,
     dateOfBirth: u.dateOfBirth ?? null,
     Contact: u.contact ?? null,
     UserType: u.employeeType?.name ?? null,
@@ -34,13 +34,13 @@ export async function listEmployeesController(req: Request, res: Response) {
 }
 
 export async function createUserController(req: Request, res: Response) {
-  const { email, password, role, employeeTypeName, technicianGroupName, fullName, dateOfBirth, contact } = req.body as Partial<{
+  const { email, password, role, employeeTypeName, technicianGroupName, name, dateOfBirth, contact } = req.body as Partial<{
     email: string;
     password: string;
     role: Role;
     employeeTypeName?: string | null;
     technicianGroupName?: string | null;
-    fullName?: string | null;
+    name?: string | null;
     dateOfBirth?: string | null;
     contact?: string | null;
   }>;
@@ -56,7 +56,7 @@ export async function createUserController(req: Request, res: Response) {
     role,
     employeeTypeName: employeeTypeName ?? null,
     technicianGroupName: technicianGroupName ?? null,
-    fullName: fullName ?? null,
+    name: name ?? null,
     dateOfBirth: dateOfBirth ?? null,
     contact: contact ?? null,
     documentFile,

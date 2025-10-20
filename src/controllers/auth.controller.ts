@@ -69,7 +69,7 @@ export async function loginController(req: Request, res: Response) {
         employeeType: user.employeeType?.name,
         technicianGroup: user.technicianGroup?.name,
         lastLoginAt: user.lastLoginAt,
-        fullName: (user as any).fullName ?? null,
+        name: (user as any).name ?? null,
         dateOfBirth: (user as any).dateOfBirth ?? null,
         contact: (user as any).contact ?? null,
         profilePhoto: (user as any).profilePhoto ?? null,

@@ -19,7 +19,7 @@ export async function listTechnicianGroupsController(req: Request, res: Response
   });
 
   const toEmployeeShape = (u: any) => ({
-    fullName: u?.fullName ?? null,
+    name: u?.name ?? null,
     dateOfBirth: u?.dateOfBirth ?? null,
     Contact: u?.contact ?? null,
     UserType: u?.employeeType?.name ?? null,
@@ -91,7 +91,7 @@ export async function addTechnicianGroupController(req: Request, res: Response) 
 
   const toEmployeeShape = (u: any) => ({
     id: u?.id,
-    fullName: u?.fullName ?? null,
+    name: u?.name ?? null,
     dateOfBirth: u?.dateOfBirth ?? null,
     Contact: u?.contact ?? null,
     UserType: u?.employeeType?.name ?? null,

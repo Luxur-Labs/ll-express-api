@@ -26,7 +26,7 @@ export async function createUser(input: {
   role: Role;
   employeeTypeName?: string | null;
   technicianGroupName?: string | null;
-  fullName?: string | null;
+  name?: string | null;
   dateOfBirth?: string | null; // ISO string expected from client
   contact?: string | null;
   documentFile?: Express.Multer.File | undefined;
@@ -76,7 +76,7 @@ export async function createUser(input: {
     employeeTypeId: employeeType?.id ?? null,
     // Only set technicianGroupId if an existing group was found and explicitly provided
     ...(technicianGroup?.id ? { technicianGroupId: technicianGroup.id } : {}),
-    fullName: input.fullName ?? null,
+    name: input.name ?? null,
     dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
     contact: input.contact ?? null,
     document: documentUrl,
@@ -86,13 +86,27 @@ export async function createUser(input: {
   return prisma.user.create({ data });
 }
 
-export async function updateUser(id: string, input: Partial<{ email: string; password: string; role: Role; employeeTypeName: string | null; technicianGroupName: string | null }>) {
+export async function updateUser(id: string, input: Partial<{ 
+  email: string; 
+  password: string; 
+  role: Role; 
+  employeeTypeName: string | null; 
+  technicianGroupName: string | null;
+  name: string | null;
+  dateOfBirth: string | null;
+  contact: string | null;
+}>) {
   const data: Record<string, unknown> = {};
   if (input.email) data.email = input.email;
   if (input.role) data.role = input.role;
   if (typeof input.password === 'string') {
     data.passwordHash = await hashPassword(input.password);
   }
+  if (input.name !== undefined) data.name = input.name;
+  if (input.dateOfBirth !== undefined) {
+    data.dateOfBirth = input.dateOfBirth ? new Date(input.dateOfBirth) : null;
+  }
+  if (input.contact !== undefined) data.contact = input.contact;
   if (input.employeeTypeName !== undefined) {
     if (input.employeeTypeName === null) {
       data.employeeType = { disconnect: true };
@@ -125,14 +139,13 @@ export async function getDoctorsList(searchQuery?: string) {
     };
   }
 
-  return await prisma.user.findMany({
+  const doctors = await prisma.user.findMany({
     where: whereClause,
-    select: {
-      id: true,
-      name: true,
-    },
-    orderBy: { name: 'asc' },
+    // Cast orderBy to any to support schema/client mismatch during transition
+    orderBy: ({ name: 'asc' } as any),
   });
+
+  return doctors.map((d: any) => ({ id: d.id, name: d.name ?? '' }));
 }
 
 

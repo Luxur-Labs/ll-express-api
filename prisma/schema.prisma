@@ -32,7 +32,6 @@ model User {
   lastLoginIp           String?
 
   // Profile fields
-  fullName              String?
   dateOfBirth           DateTime?
   contact               String?
   document              String?

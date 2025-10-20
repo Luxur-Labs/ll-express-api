@@ -8,7 +8,7 @@ import multer from 'multer';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
 import { authRateLimiter, speedLimiter, forgotPasswordRateLimiter } from '../middleware/rateLimiter.middleware';
 import { validate } from '../middleware/validate.middleware';
-import { loginSchema, forgotPasswordSchema } from '../schemas/auth.schema';
+import { loginSchema, forgotPasswordSchema, updateUserSchema } from '../schemas/auth.schema';
 
 import clinicRoutes from './clinic.routes';
 import productRoutes from './product.routes';
@@ -46,7 +46,7 @@ router.post(
   ]),
   createUserController
 );
-router.put('/users/:id', authenticate, authorizeRoles('SUPER_ADMIN'), updateUserController);
+router.put('/users/:id', authenticate, authorizeRoles('SUPER_ADMIN'), upload.none(), validate(updateUserSchema), updateUserController);
 router.delete('/users/:id', authenticate, authorizeRoles('SUPER_ADMIN'), deleteUserController);
 
 // Doctors (SUPER_ADMIN)
