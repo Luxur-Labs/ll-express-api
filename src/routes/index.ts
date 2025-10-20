@@ -1,69 +1,37 @@
 import { Router } from 'express';
- 
-import { addEmployeeTypeController, addTechnicianGroupController, listEmployeeTypesController, listTechnicianGroupsController, updateTechnicianGroupController, deleteTechnicianGroupController } from '../controllers/admin.controller';
-import { loginController, meController, forgotPasswordController, logoutController } from '../controllers/auth.controller';
+
 import { healthController } from '../controllers/health.controller'; 
-import { listUsersController, listEmployeesController, createUserController, updateUserController, deleteUserController, getDoctorsListController } from '../controllers/user.controller';
-import multer from 'multer';
+import { getDoctorsListController } from '../controllers/user.controller';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
-import { authRateLimiter, speedLimiter, forgotPasswordRateLimiter } from '../middleware/rateLimiter.middleware';
-import { validate } from '../middleware/validate.middleware';
-import { loginSchema, forgotPasswordSchema, updateUserSchema, updateTechnicianGroupSchema, deleteTechnicianGroupSchema } from '../schemas/auth.schema';
 
 import clinicRoutes from './clinic.routes';
 import productRoutes from './product.routes';
 import patientRoutes from './patient.routes';
 import orderRoutes from './order.routes';
+import userRoutes from './user.routes';
+import adminRoutes from './admin.routes';
+import authRoutes from './auth.routes';
  
-const router = Router(); 
-const upload = multer();
+const router = Router();
  
 router.get('/health', healthController); 
 
-// Auth routes with rate limiting
-router.post('/auth/login', authRateLimiter, speedLimiter, validate(loginSchema), loginController);
-router.post('/auth/logout', authenticate, logoutController);
-router.post('/auth/forgot-password', forgotPasswordRateLimiter, validate(forgotPasswordSchema), forgotPasswordController);
-router.get('/auth/me', authenticate, meController);
+// Auth routes
+router.use('/auth', authRoutes);
 
-// Admin: only Super Admin may manage sub types
-// Removed combined types endpoint in favor of dedicated endpoints below
-router.get('/admin/employee-types', authenticate, authorizeRoles('SUPER_ADMIN'), listEmployeeTypesController);
-router.get('/admin/technician-groups', authenticate, authorizeRoles('SUPER_ADMIN'), listTechnicianGroupsController);
-router.post('/admin/employee-types', authenticate, authorizeRoles('SUPER_ADMIN'), addEmployeeTypeController);
-router.post('/admin/technician-groups', authenticate, authorizeRoles('SUPER_ADMIN'), addTechnicianGroupController);
-router.put('/admin/technician-groups/:id', authenticate, authorizeRoles('SUPER_ADMIN'), upload.none(), validate(updateTechnicianGroupSchema), updateTechnicianGroupController);
-router.delete('/admin/technician-groups/:id', authenticate, authorizeRoles('SUPER_ADMIN'), validate(deleteTechnicianGroupSchema), deleteTechnicianGroupController);
+// Admin routes (employee-types, technician-groups)
+router.use('/admin', adminRoutes);
 
-// Users (SUPER_ADMIN)
-router.get('/users', authenticate, authorizeRoles('SUPER_ADMIN'), listUsersController);
-router.get('/users/employees', authenticate, authorizeRoles('SUPER_ADMIN'), listEmployeesController);
-router.post(
-  '/users',
-  authenticate,
-  authorizeRoles('SUPER_ADMIN'),
-  upload.fields([
-    { name: 'document', maxCount: 1 },
-    { name: 'profilePhoto', maxCount: 1 },
-  ]),
-  createUserController
-);
-router.put('/users/:id', authenticate, authorizeRoles('SUPER_ADMIN'), upload.none(), validate(updateUserSchema), updateUserController);
-router.delete('/users/:id', authenticate, authorizeRoles('SUPER_ADMIN'), deleteUserController);
+// User routes
+router.use('/users', userRoutes);
 
-// Doctors (SUPER_ADMIN)
+// Doctors (SUPER_ADMIN) - kept in main routes as requested
 router.get('/doctors/list', authenticate, authorizeRoles('SUPER_ADMIN'), getDoctorsListController);
 
-// Clinics (SUPER_ADMIN)
+// Other entity routes
 router.use('/clinics', clinicRoutes);
-
-// Products (SUPER_ADMIN)
 router.use('/products', productRoutes);
-
-// Patients (SUPER_ADMIN)
 router.use('/patients', patientRoutes);
-
-// Orders (SUPER_ADMIN)
 router.use('/orders', orderRoutes);
  
 export default router;
