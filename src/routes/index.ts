@@ -12,6 +12,8 @@ import orderRoutes from './order.routes';
 import userRoutes from './user.routes';
 import adminRoutes from './admin.routes';
 import authRoutes from './auth.routes';
+import orderTechnicianGroupRoutes from './orderTechnicianGroup.routes';
+import orderStatusRoutes from './orderStatus.routes';
  
 const router = Router();
  
@@ -25,6 +27,10 @@ router.use('/auth', authRoutes);
 
 // Admin routes (employee-types, technician-groups)
 router.use('/admin', adminRoutes);
+
+// Order-Technician Group assignment routes
+router.use('/order-technician-groups', orderTechnicianGroupRoutes);
+router.use('/order-status', orderStatusRoutes);
 
 // User routes
 router.use('/users', userRoutes);

@@ -1,4 +1,5 @@
 import { prisma } from '../utils/prisma';
+import { createOrderTransition } from '../utils/orderTransitions';
 
 export interface CreateOrderProductData {
   productId: string;
@@ -40,6 +41,7 @@ export interface CreateOrderData {
   dateOfApproach: Date;
   orderProducts: CreateOrderProductData[];
   files?: CreateFileData[];
+  status?: 'NEW' | 'IN_PROGRESS' | 'READY_FOR_DISPATCH' | 'DISPATCH_INITIATED' | 'DISPATCH_PARTNER_BOOKED' | 'ORDER_INITIATED' | 'TASK_ASSIGNMENT' | 'TASK_COMPLETION' | 'TASK_APPROVED' | 'TASK_REJECTED' | 'ORDER_SHIPPED' | 'ORDER_DELIVERED';
 }
 
 export interface UpdateOrderData {
@@ -54,12 +56,17 @@ export interface UpdateOrderData {
   enterRemark?: string;
   estimateDate?: Date;
   dateOfApproach?: Date;
+  status?: 'NEW' | 'IN_PROGRESS' | 'READY_FOR_DISPATCH' | 'DISPATCH_INITIATED' | 'DISPATCH_PARTNER_BOOKED' | 'ORDER_INITIATED' | 'TASK_ASSIGNMENT' | 'TASK_COMPLETION' | 'TASK_APPROVED' | 'TASK_REJECTED' | 'ORDER_SHIPPED' | 'ORDER_DELIVERED';
 }
 
 export class OrderService {
   async createOrder(data: CreateOrderData) {
-    return await prisma.order.create({
+    // Generate user-friendly order ID
+    const orderId = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+    
+    const order = await prisma.order.create({
       data: {
+        id: orderId,
         invoiceNumber: data.invoiceNumber,
         patientId: data.patientId,
         doctorId: data.doctorId,
@@ -71,6 +78,7 @@ export class OrderService {
         enterRemark: data.enterRemark,
         estimateDate: data.estimateDate,
         dateOfApproach: data.dateOfApproach,
+        status: data.status || 'NEW',
         orderProducts: {
           create: data.orderProducts.map(product => ({
             productId: product.productId,
@@ -90,7 +98,7 @@ export class OrderService {
         files: data.files ? {
           create: data.files.map(file => ({
             fileName: file.fileName,
-            fileSize: file.fileSize ? BigInt(file.fileSize) : null,
+            fileSize: file.fileSize,
             fileType: file.fileType,
             fileExtension: file.fileExtension,
             s3Key: file.s3Key,
@@ -113,6 +121,17 @@ export class OrderService {
         files: true,
       },
     });
+
+    // Create initial transition for order creation
+    await createOrderTransition({
+      orderId: order.id,
+      fromState: undefined,
+      toState: 'ORDER_INITIATED',
+      transitionedBy: undefined, // System-generated
+      remarks: 'Order initiated',
+    });
+
+    return order;
   }
 
   async getOrderById(id: string) {
@@ -146,42 +165,19 @@ export class OrderService {
             product: true,
           }
         },
+        files: true,
       },
     });
   }
 
-  async getOrdersList(page: number = 1, limit: number = 20) {
-    const skip = (page - 1) * limit;
+  async getOrdersList(page: number = 0, limit: number = 20) {
+    const skip = page * limit;
     
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         skip,
         take: limit,
         include: {
-          patient: {
-            select: {
-              name: true,
-              age: true,
-              gender: true,
-            }
-          },
-          doctor: {
-            select: {
-              name: true,
-            }
-          },
-          referredDoctor: {
-            select: {
-              name: true,
-            }
-          },
-          clinic: {
-            select: {
-              clinicName: true,
-              clientAddress: true,
-              organizationId: true,
-            }
-          },
           orderProducts: {
             include: {
               product: {
@@ -195,64 +191,24 @@ export class OrderService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      prisma.order.count()
+      prisma.order.count(),
     ]);
 
-    const totalPages = Math.ceil(total / limit);
-
     return {
-      orders: orders.map(order => ({
-        id: order.id,
-        patientName: order.patient.name,
-        product: order.orderProducts[0]?.product.product || 'N/A',
-        specification: order.orderProducts[0]?.workSpecification || 'N/A',
-        quantity: order.orderProducts.length,
-        amount: order.orderProducts.reduce((sum: number, op: any) => sum + Number(op.product.price), 0),
-        partner: order.partner,
-        clinicAddress: order.clinic.clientAddress,
-        createdOn: order.createdAt.getTime(),
-        status: 'NEW', // Default status
-        processInstanceId: null, // Not implemented yet
-        assignedGroup: null, // Not implemented yet
-        patientAge: order.patient.age.toString(),
-        gender: order.patient.gender,
-        organisationId: order.clinic.organizationId,
-        invoiceNumber: order.invoiceNumber,
-        doctorName: order.doctor.name || 'N/A',
-        doctorContact: 'N/A', // contactNumber not available in User model
-        doctorReferredBy: order.referredDoctor?.name || null,
-        clinicName: order.clinic.clinicName,
-        schedule: order.schedule.toISOString().split('T')[0],
-        estimatedDate: order.estimateDate.toISOString().split('T')[0],
-        dateOfApproach: order.dateOfApproach.toISOString().split('T')[0],
-        remarks: order.enterRemark,
-        orderProducts: order.orderProducts.map(op => ({
-          id: op.id,
-          productId: op.productId,
-          productName: op.product.product,
-          productPrice: Number(op.product.price),
-          workType: op.workType,
-          workSpecification: op.workSpecification,
-          shadeType: op.shadeType,
-          finishingInstructions: op.finishingInstructions,
-          componentDetails: op.componentDetails,
-          incaseOfAllAbutments: op.incaseOfAllAbutments,
-          occlusalStaining: op.occlusalStaining,
-          ponticDesign: op.ponticDesign,
-          repeatCorrections: op.repeatCorrections,
-          enterReason: op.enterReason,
-          unitNumbers: op.unitNumbers,
-          createdAt: op.createdAt.getTime(),
-          updatedAt: op.updatedAt.getTime(),
+      data: {
+        orders: orders.map(order => ({
+          id: order.id,
+          status: order.status,
+          createdOn: order.createdAt.getTime(),
+          amount: order.orderProducts.reduce((sum: number, op: any) => sum + Number(op.product.price), 0),
+          assignedGroup: null,
+          orderProducts: order.orderProducts.map((op: any) => `${op.product.product} (${op.workSpecification})`).join(', ')
         })),
-      })),
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1,
+        pagination: {
+          page,
+          limit,
+          total,
+        }
       }
     };
   }
@@ -271,12 +227,22 @@ export class OrderService {
         },
         files: true,
       },
-      orderBy: { createdAt: 'desc' },
     });
   }
 
-  async updateOrder(id: string, data: UpdateOrderData) {
-    return await prisma.order.update({
+  async updateOrder(id: string, data: UpdateOrderData, transitionedBy?: string) {
+    // Get current order status before update
+    const currentOrder = await prisma.order.findUnique({
+      where: { id },
+      select: { status: true },
+    });
+
+    if (!currentOrder) {
+      throw new Error('Order not found');
+    }
+
+    // Update the order
+    const updatedOrder = await prisma.order.update({
       where: { id },
       data,
       include: {
@@ -291,6 +257,19 @@ export class OrderService {
         },
       },
     });
+
+    // Create transition if status changed
+    if (data.status && data.status !== currentOrder.status) {
+      await createOrderTransition({
+        orderId: id,
+        fromState: currentOrder.status,
+        toState: data.status,
+        transitionedBy,
+        remarks: `Order status manually updated`,
+      });
+    }
+
+    return updatedOrder;
   }
 
   async deleteOrder(id: string) {
@@ -298,117 +277,6 @@ export class OrderService {
       where: { id },
     });
   }
-
-  async getOrdersByPatient(patientId: string) {
-    return await prisma.order.findMany({
-      where: { patientId },
-      include: {
-        patient: true,
-        doctor: true,
-        clinic: true,
-        referredDoctor: true,
-        orderProducts: {
-          include: {
-            product: true,
-          }
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  async getOrdersByDoctor(doctorId: string) {
-    return await prisma.order.findMany({
-      where: { doctorId },
-      include: {
-        patient: true,
-        doctor: true,
-        clinic: true,
-        referredDoctor: true,
-        orderProducts: {
-          include: {
-            product: true,
-          }
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  async getOrdersByClinic(clinicId: string) {
-    return await prisma.order.findMany({
-      where: { clinicId },
-      include: {
-        patient: true,
-        doctor: true,
-        clinic: true,
-        referredDoctor: true,
-        orderProducts: {
-          include: {
-            product: true,
-          }
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  async getOrdersByPartner(partner: string) {
-    return await prisma.order.findMany({
-      where: { partner },
-      include: {
-        patient: true,
-        doctor: true,
-        clinic: true,
-        referredDoctor: true,
-        orderProducts: {
-          include: {
-            product: true,
-          }
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  async getOrdersByScanningMode(scanningMode: string) {
-    return await prisma.order.findMany({
-      where: { scanningMode },
-      include: {
-        patient: true,
-        doctor: true,
-        clinic: true,
-        referredDoctor: true,
-        orderProducts: {
-          include: {
-            product: true,
-          }
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  async getOrdersByDateRange(startDate: Date, endDate: Date) {
-    return await prisma.order.findMany({
-      where: {
-        schedule: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      include: {
-        patient: true,
-        doctor: true,
-        clinic: true,
-        referredDoctor: true,
-        orderProducts: {
-          include: {
-            product: true,
-          }
-        },
-      },
-      orderBy: { schedule: 'asc' },
-    });
-  }
 }
+
+export const orderService = new OrderService();

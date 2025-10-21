@@ -13,6 +13,7 @@ enum Role {
   EMPLOYEE
 }
 
+
 model User {
   id                    String            @id @default(uuid())
   email                 String            @unique
@@ -58,6 +59,7 @@ model TechnicianGroup {
   leaderId  String? @unique
   leader    User?   @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
   members   User[]  @relation("GroupMembers")
+  orderAssignments OrderTechnicianGroup[]
 }
 
 model Clinic {
@@ -126,10 +128,14 @@ model Order {
   enterRemark     String
   estimateDate    DateTime
   dateOfApproach  DateTime
+  status          String @default("NEW")
+  applicationStatus String @default("NEW")
   
   // Relations
   orderProducts   OrderProduct[]
   files           File[]
+  technicianGroups OrderTechnicianGroup[]
+  transitions     OrderTransition[]
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -160,6 +166,53 @@ model OrderProduct {
   
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+model OrderTechnicianGroup {
+  id                String   @id @default(uuid())
+  
+  // Relations
+  order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId           String
+  
+  technicianGroup   TechnicianGroup @relation(fields: [technicianGroupId], references: [id], onDelete: Cascade)
+  technicianGroupId String
+  
+  // Assignment details
+  assignedAt        DateTime @default(now())
+  assignedBy        String?  // User ID who assigned this
+  notes             String?  // Optional notes about the assignment
+  
+  // Status tracking
+  isActive          Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Ensure unique order-technician group combination
+  @@unique([orderId, technicianGroupId])
+}
+
+model OrderTransition {
+  id              String   @id @default(uuid())
+  
+  // Relations
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId         String
+  
+  // Transition details
+  fromState       String?
+  toState         String
+  transitionedBy  String?  // User ID who made the transition
+  remarks         String?  // Optional remarks about the transition
+  transitionOrder Int      // Sequential order of transitions for this order
+  
+  // Metadata
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Ensure unique transition order per order
+  @@unique([orderId, transitionOrder])
 }
 
 model File {

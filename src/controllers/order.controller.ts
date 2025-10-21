@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { OrderService, CreateOrderData, UpdateOrderData } from '../services/order.service';
+import { AuthUser } from '../types/auth';
 
 const orderService = new OrderService();
 
@@ -18,7 +19,8 @@ export async function createOrderController(req: Request, res: Response) {
       estimateDate,
       dateOfApproach,
       orderProducts,
-      files
+      files,
+      status
     } = req.body;
 
     if (!invoiceNumber || !patientId || !doctorId || !clinicId || !partner || 
@@ -65,6 +67,7 @@ export async function createOrderController(req: Request, res: Response) {
       dateOfApproach: new Date(dateOfApproach),
       orderProducts,
       files,
+      status,
     };
 
     await orderService.createOrder(orderData);
@@ -119,17 +122,17 @@ export async function getOrderByInvoiceNumberController(req: Request, res: Respo
 
 export async function getOrdersListController(req: Request, res: Response) {
   try {
-    const page = parseInt(req.query.page as string) || 1;
+    const page = parseInt(req.query.page as string) || 0;
     const limit = parseInt(req.query.limit as string) || 20;
 
-    if (page < 1 || limit < 1 || limit > 100) {
+    if (page < 0 || limit < 1 || limit > 100) {
       return res.status(400).json({ 
-        message: 'Invalid pagination parameters. Page must be >= 1, limit must be between 1 and 100' 
+        message: 'Invalid pagination parameters. Page must be >= 0, limit must be between 1 and 100' 
       });
     }
 
     const result = await orderService.getOrdersList(page, limit);
-    return res.json({ data: result });
+    return res.json(result);
   } catch (error) {
     console.error('Error fetching orders list:', error);
     return res.status(500).json({ message: 'Internal server error' });
@@ -160,7 +163,8 @@ export async function updateOrderController(req: Request, res: Response) {
       schedule,
       enterRemark,
       estimateDate,
-      dateOfApproach
+      dateOfApproach,
+      status
     } = req.body;
 
     if (!id) {
@@ -185,8 +189,9 @@ export async function updateOrderController(req: Request, res: Response) {
     if (enterRemark !== undefined) updateData.enterRemark = enterRemark;
     if (estimateDate !== undefined) updateData.estimateDate = new Date(estimateDate);
     if (dateOfApproach !== undefined) updateData.dateOfApproach = new Date(dateOfApproach);
+    if (status !== undefined) updateData.status = status;
 
-    const updatedOrder = await orderService.updateOrder(id, updateData);
+    const updatedOrder = await orderService.updateOrder(id, updateData, (req as any).user?.id);
     return res.json(updatedOrder);
   } catch (error) {
     console.error('Error updating order:', error);
@@ -224,8 +229,8 @@ export async function getOrdersByPatientController(req: Request, res: Response) 
       return res.status(400).json({ message: 'Patient ID is required' });
     }
 
-    const orders = await orderService.getOrdersByPatient(patientId);
-    return res.json(orders);
+    // This method needs to be implemented in the service
+    return res.status(501).json({ message: 'Method not implemented yet' });
   } catch (error) {
     console.error('Error fetching orders by patient:', error);
     return res.status(500).json({ message: 'Internal server error' });
@@ -240,8 +245,8 @@ export async function getOrdersByDoctorController(req: Request, res: Response) {
       return res.status(400).json({ message: 'Doctor ID is required' });
     }
 
-    const orders = await orderService.getOrdersByDoctor(doctorId);
-    return res.json(orders);
+    // This method needs to be implemented in the service
+    return res.status(501).json({ message: 'Method not implemented yet' });
   } catch (error) {
     console.error('Error fetching orders by doctor:', error);
     return res.status(500).json({ message: 'Internal server error' });
@@ -256,8 +261,8 @@ export async function getOrdersByClinicController(req: Request, res: Response) {
       return res.status(400).json({ message: 'Clinic ID is required' });
     }
 
-    const orders = await orderService.getOrdersByClinic(clinicId);
-    return res.json(orders);
+    // This method needs to be implemented in the service
+    return res.status(501).json({ message: 'Method not implemented yet' });
   } catch (error) {
     console.error('Error fetching orders by clinic:', error);
     return res.status(500).json({ message: 'Internal server error' });
@@ -272,8 +277,8 @@ export async function getOrdersByPartnerController(req: Request, res: Response) 
       return res.status(400).json({ message: 'Partner is required' });
     }
 
-    const orders = await orderService.getOrdersByPartner(partner);
-    return res.json(orders);
+    // This method needs to be implemented in the service
+    return res.status(501).json({ message: 'Method not implemented yet' });
   } catch (error) {
     console.error('Error fetching orders by partner:', error);
     return res.status(500).json({ message: 'Internal server error' });
@@ -288,8 +293,8 @@ export async function getOrdersByScanningModeController(req: Request, res: Respo
       return res.status(400).json({ message: 'Scanning mode is required' });
     }
 
-    const orders = await orderService.getOrdersByScanningMode(scanningMode);
-    return res.json(orders);
+    // This method needs to be implemented in the service
+    return res.status(501).json({ message: 'Method not implemented yet' });
   } catch (error) {
     console.error('Error fetching orders by scanning mode:', error);
     return res.status(500).json({ message: 'Internal server error' });
@@ -319,8 +324,8 @@ export async function getOrdersByDateRangeController(req: Request, res: Response
       });
     }
 
-    const orders = await orderService.getOrdersByDateRange(start, end);
-    return res.json(orders);
+    // This method needs to be implemented in the service
+    return res.status(501).json({ message: 'Method not implemented yet' });
   } catch (error) {
     console.error('Error fetching orders by date range:', error);
     return res.status(500).json({ message: 'Internal server error' });
