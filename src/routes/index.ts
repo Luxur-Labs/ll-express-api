@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { healthController } from '../controllers/health.controller'; 
 import { getDoctorsListController } from '../controllers/user.controller';
+import { getDashboardController } from '../controllers/dashboard.controller';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
 
 import clinicRoutes from './clinic.routes';
@@ -15,6 +16,9 @@ import authRoutes from './auth.routes';
 const router = Router();
  
 router.get('/health', healthController); 
+
+// Dashboard (SUPER_ADMIN only)
+router.get('/dashboard', authenticate, authorizeRoles('SUPER_ADMIN'), getDashboardController);
 
 // Auth routes
 router.use('/auth', authRoutes);
