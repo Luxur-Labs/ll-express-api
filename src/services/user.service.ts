@@ -50,11 +50,13 @@ export async function createUser(input: {
     input.employeeTypeName
       ? prisma.employeeType.upsert({ where: { name: input.employeeTypeName }, update: {}, create: { name: input.employeeTypeName } })
       : Promise.resolve(null),
-    // IMPORTANT: Do NOT create a technician group by default; only link if it already exists
+    // IMPORTANT: Do NOT create a technician group by default; only link if it already exists and is not soft-deleted
     input.technicianGroupName
-      ? prisma.technicianGroup.findUnique({ where: { name: input.technicianGroupName } })
+      ? prisma.technicianGroup.findFirst({ where: { name: input.technicianGroupName } })
       : Promise.resolve(null),
   ]);
+
+  const technicianGroupId = technicianGroup && (technicianGroup as any)?.deletedAt == null ? technicianGroup.id : undefined;
 
   // Upload files to CDN (local simulation). Optional.
   let documentUrl: string | null = null;
@@ -86,7 +88,7 @@ export async function createUser(input: {
     role: input.role as PrismaRole,
     employeeTypeId: employeeType?.id ?? null,
     // Only set technicianGroupId if an existing group was found and explicitly provided
-    ...(technicianGroup?.id ? { technicianGroupId: technicianGroup.id } : {}),
+    ...(technicianGroupId ? { technicianGroupId } : {}),
     name: input.name ?? null,
     dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
     contact: input.contact ?? null,

@@ -61,6 +61,9 @@ model TechnicianGroup {
   leaderId  String? @unique
   leader    User?   @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
   members   User[]  @relation("GroupMembers")
+
+  deletedAt DateTime?
+  deletedBy String?
 }
 
 model Clinic {

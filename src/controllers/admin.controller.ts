@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 
-import { EmployeeType, TechnicianGroup } from '../types/auth';
+import { EmployeeType, TechnicianGroup, AuthUser } from '../types/auth';
 import { prisma } from '../utils/prisma';
+import { Prisma } from '@prisma/client';
 
 // Combined list endpoint removed; use listEmployeeTypesController and listTechnicianGroupsController
 
@@ -12,9 +13,10 @@ export async function listEmployeeTypesController(req: Request, res: Response) {
 
 export async function listTechnicianGroupsController(req: Request, res: Response) {
   const groups = await prisma.technicianGroup.findMany({
+    where: ({ deletedAt: null } as Prisma.TechnicianGroupWhereInput),
     include: {
       leader: { include: { employeeType: true, technicianGroup: true } },
-      members: { include: { employeeType: true, technicianGroup: true } },
+      members: { where: ({ deletedAt: null } as Prisma.UserWhereInput), include: { employeeType: true, technicianGroup: true } },
     }
   });
 
@@ -54,8 +56,8 @@ export async function addTechnicianGroupController(req: Request, res: Response) 
 
   // Validate leader if provided
   if (leaderId) {
-    const leader = await prisma.user.findUnique({ 
-      where: { id: leaderId, deletedAt: null } 
+    const leader = await prisma.user.findFirst({ 
+      where: ({ id: leaderId, deletedAt: null } as Prisma.UserWhereInput)
     });
     if (!leader) return res.status(400).json({ message: 'leaderId is invalid' });
   }
@@ -89,7 +91,7 @@ export async function addTechnicianGroupController(req: Request, res: Response) 
     where: { id: upserted.id },
     include: {
       leader: { include: { employeeType: true, technicianGroup: true } },
-      members: { include: { employeeType: true, technicianGroup: true } },
+      members: { where: ({ deletedAt: null } as Prisma.UserWhereInput), include: { employeeType: true, technicianGroup: true } },
     }
   });
 
@@ -135,8 +137,8 @@ export async function updateTechnicianGroupController(req: Request, res: Respons
 
   // Validate leader if provided
   if (leaderId) {
-    const leader = await prisma.user.findUnique({ 
-      where: { id: leaderId, deletedAt: null } 
+    const leader = await prisma.user.findFirst({ 
+      where: ({ id: leaderId, deletedAt: null } as Prisma.UserWhereInput)
     });
     if (!leader) return res.status(400).json({ message: 'leaderId is invalid' });
   }
@@ -202,7 +204,7 @@ export async function updateTechnicianGroupController(req: Request, res: Respons
     where: { id: updated.id },
     include: {
       leader: { include: { employeeType: true, technicianGroup: true } },
-      members: { include: { employeeType: true, technicianGroup: true } },
+      members: { where: ({ deletedAt: null } as Prisma.UserWhereInput), include: { employeeType: true, technicianGroup: true } },
     }
   });
 
@@ -229,6 +231,7 @@ export async function updateTechnicianGroupController(req: Request, res: Respons
 
 export async function deleteTechnicianGroupController(req: Request, res: Response) {
   const { id } = req.params as { id: string };
+  const currentUser = res.locals.user as AuthUser | undefined;
 
   // First, remove all users from this group
   await prisma.user.updateMany({
@@ -236,9 +239,10 @@ export async function deleteTechnicianGroupController(req: Request, res: Respons
     data: { technicianGroupId: null },
   });
 
-  // Then delete the group
-  await prisma.technicianGroup.delete({
+  // Soft delete the group
+  await prisma.technicianGroup.update({
     where: { id },
+    data: ({ deletedAt: new Date(), deletedBy: currentUser?.id ?? null } as any),
   });
 
   return res.status(204).send();
