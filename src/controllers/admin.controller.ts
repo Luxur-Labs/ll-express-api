@@ -54,7 +54,9 @@ export async function addTechnicianGroupController(req: Request, res: Response) 
 
   // Validate leader if provided
   if (leaderId) {
-    const leader = await prisma.user.findUnique({ where: { id: leaderId } });
+    const leader = await prisma.user.findUnique({ 
+      where: { id: leaderId, deletedAt: null } 
+    });
     if (!leader) return res.status(400).json({ message: 'leaderId is invalid' });
   }
 
@@ -133,7 +135,9 @@ export async function updateTechnicianGroupController(req: Request, res: Respons
 
   // Validate leader if provided
   if (leaderId) {
-    const leader = await prisma.user.findUnique({ where: { id: leaderId } });
+    const leader = await prisma.user.findUnique({ 
+      where: { id: leaderId, deletedAt: null } 
+    });
     if (!leader) return res.status(400).json({ message: 'leaderId is invalid' });
   }
 

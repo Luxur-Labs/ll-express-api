@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 
 import { createUser, deleteUser, listEmployees, listUsers, updateUser, getDoctorsList } from '../services/user.service';
-import { Role } from '../types/auth';
+import { Role, AuthUser } from '../types/auth';
 
 export async function listUsersController(req: Request, res: Response) {
   const users = await listUsers();
@@ -74,7 +74,8 @@ export async function updateUserController(req: Request, res: Response) {
 
 export async function deleteUserController(req: Request, res: Response) {
   const { id } = req.params as { id: string };
-  await deleteUser(id);
+  const currentUser = res.locals.user as AuthUser;
+  await deleteUser(id, currentUser.id);
   return res.status(204).send();
 }
 

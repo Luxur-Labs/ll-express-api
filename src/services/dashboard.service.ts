@@ -71,23 +71,24 @@ export class DashboardService {
       recentPatients
     ] = await Promise.all([
       // User counts
-      prisma.user.count(),
+      prisma.user.count({ where: { deletedAt: null } }),
       prisma.user.groupBy({
         by: ['role'],
-        _count: { role: true }
+        _count: { role: true },
+        where: { deletedAt: null }
       }).catch(() => []), // Handle empty results
       prisma.user.groupBy({
         by: ['employeeTypeId'],
         _count: { employeeTypeId: true },
-        where: { employeeTypeId: { not: null } }
+        where: { employeeTypeId: { not: null }, deletedAt: null }
       }).catch(() => []), // Handle empty results
       prisma.user.groupBy({
         by: ['technicianGroupId'],
         _count: { technicianGroupId: true },
-        where: { technicianGroupId: { not: null } }
+        where: { technicianGroupId: { not: null }, deletedAt: null }
       }).catch(() => []), // Handle empty results
       prisma.user.count({
-        where: { createdAt: { gte: thirtyDaysAgo } }
+        where: { deletedAt: null, createdAt: { gte: thirtyDaysAgo } }
       }),
 
       // Order counts

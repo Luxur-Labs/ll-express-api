@@ -28,8 +28,8 @@ export async function loginController(req: Request, res: Response) {
       });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
+    const user = await prisma.user.findFirst({
+      where: ({ email, deletedAt: null } as any),
       include: { employeeType: true, technicianGroup: true },
     });
 
@@ -55,9 +55,9 @@ export async function loginController(req: Request, res: Response) {
 
     const token = signToken({
       id: user.id,
-      role: user.role as unknown as AuthRole,
-      employeeType: (user.employeeType?.name as EmployeeType | undefined) ?? null,
-      technicianGroup: (user.technicianGroup?.name as TechnicianGroup | undefined) ?? null,
+      role: user.role as AuthRole,
+      employeeType: user.employeeType?.name ?? null,
+      technicianGroup: user.technicianGroup?.name ?? null,
     });
 
     return res.json({ 
@@ -69,10 +69,10 @@ export async function loginController(req: Request, res: Response) {
         employeeType: user.employeeType?.name,
         technicianGroup: user.technicianGroup?.name,
         lastLoginAt: user.lastLoginAt,
-        name: (user as any).name ?? null,
-        dateOfBirth: (user as any).dateOfBirth ?? null,
-        contact: (user as any).contact ?? null,
-        profilePhoto: (user as any).profilePhoto ?? null,
+        name: user.name ?? null,
+        dateOfBirth: user.dateOfBirth ?? null,
+        contact: user.contact ?? null,
+        profilePhoto: user.profilePhoto ?? null,
       }
     });
   } catch (error) {

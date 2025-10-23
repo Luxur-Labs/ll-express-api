@@ -3,19 +3,30 @@ import { uploadToCdn } from '../utils/cdn';
 
 import { hashPassword } from '../utils/password';
 import { prisma } from '../utils/prisma';
+import { Prisma } from '@prisma/client';
+import type { Role as PrismaRole } from '@prisma/client';
+
+// Updated to support soft delete with deletedAt and deletedBy fields
 
 export async function findUserByEmail(email: string) {
-  return prisma.user.findUnique({ where: { email }, include: { employeeType: true, technicianGroup: true } });
+  return prisma.user.findUnique({ 
+    where: { email }, 
+    include: { employeeType: true, technicianGroup: true } 
+  });
 }
 
 export async function listUsers() {
-  return prisma.user.findMany({ include: { employeeType: true, technicianGroup: true } });
+  const where = ({ deletedAt: null } as Prisma.UserWhereInput);
+  return prisma.user.findMany({ 
+    where,
+    include: { employeeType: true, technicianGroup: true } 
+  });
 }
 
 export async function listEmployees(filter?: { employeeTypeName?: string }) {
-  const where: any = { role: 'EMPLOYEE' };
+  const where = ({ role: 'EMPLOYEE', deletedAt: null } as Prisma.UserWhereInput);
   if (filter?.employeeTypeName) {
-    where.employeeType = { name: filter.employeeTypeName };
+    where.employeeType = { is: { name: filter.employeeTypeName } };
   }
   return prisma.user.findMany({ where, include: { employeeType: true, technicianGroup: true } });
 }
@@ -69,10 +80,10 @@ export async function createUser(input: {
     if (profilePhotoUrl && profilePhotoUrl.startsWith('/')) profilePhotoUrl = `${input.publicBaseUrl}${profilePhotoUrl}`;
   }
 
-  const data: any = {
+  const data: Prisma.UserUncheckedCreateInput = {
     email: input.email,
     passwordHash,
-    role: input.role,
+    role: input.role as PrismaRole,
     employeeTypeId: employeeType?.id ?? null,
     // Only set technicianGroupId if an existing group was found and explicitly provided
     ...(technicianGroup?.id ? { technicianGroupId: technicianGroup.id } : {}),
@@ -96,9 +107,9 @@ export async function updateUser(id: string, input: Partial<{
   dateOfBirth: string | null;
   contact: string | null;
 }>) {
-  const data: Record<string, unknown> = {};
+  const data: Prisma.UserUpdateInput = {};
   if (input.email) data.email = input.email;
-  if (input.role) data.role = input.role;
+  if (input.role) data.role = input.role as PrismaRole;
   if (typeof input.password === 'string') {
     data.passwordHash = await hashPassword(input.password);
   }
@@ -125,12 +136,19 @@ export async function updateUser(id: string, input: Partial<{
   return prisma.user.update({ where: { id }, data });
 }
 
-export async function deleteUser(id: string) {
-  return prisma.user.delete({ where: { id } });
+export async function deleteUser(id: string, deletedBy: string) {
+  const data = ({
+    deletedAt: new Date(),
+    deletedBy,
+  } as Prisma.UserUpdateInput);
+  return prisma.user.update({ 
+    where: { id }, 
+    data
+  });
 }
 
 export async function getDoctorsList(searchQuery?: string) {
-  const whereClause: any = { role: 'DOCTOR' };
+  const whereClause = ({ role: 'DOCTOR', deletedAt: null } as Prisma.UserWhereInput);
   
   if (searchQuery && searchQuery.trim()) {
     whereClause.name = {
@@ -141,11 +159,11 @@ export async function getDoctorsList(searchQuery?: string) {
 
   const doctors = await prisma.user.findMany({
     where: whereClause,
-    // Cast orderBy to any to support schema/client mismatch during transition
-    orderBy: ({ name: 'asc' } as any),
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true },
   });
 
-  return doctors.map((d: any) => ({ id: d.id, name: d.name ?? '' }));
+  return doctors.map((d) => ({ id: d.id, name: d.name ?? '' }));
 }
 
 

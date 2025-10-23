@@ -8,8 +8,8 @@ const LOCKOUT_DURATION_MINUTES = 30;
  * Check if account is currently locked
  */
 export async function isAccountLocked(email: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { email },
+  const user = await prisma.user.findFirst({
+    where: { email, deletedAt: null },
     select: { accountLockedUntil: true },
   });
 
@@ -36,8 +36,8 @@ export async function isAccountLocked(email: string): Promise<boolean> {
  * Record a failed login attempt
  */
 export async function recordFailedLogin(email: string, ip: string): Promise<void> {
-  const user = await prisma.user.findUnique({
-    where: { email },
+  const user = await prisma.user.findFirst({
+    where: { email, deletedAt: null },
     select: { id: true, failedLoginAttempts: true },
   });
 
