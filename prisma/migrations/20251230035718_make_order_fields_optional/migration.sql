@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Order" ALTER COLUMN "scanningMode" DROP NOT NULL,
+ALTER COLUMN "schedule" DROP NOT NULL,
+ALTER COLUMN "enterRemark" DROP NOT NULL,
+ALTER COLUMN "dateOfApproach" DROP NOT NULL;

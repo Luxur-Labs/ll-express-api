@@ -62,6 +62,7 @@ export class DashboardService {
       recentUsers,
       totalOrders,
       ordersWithRevenue,
+      ordersByStatus,
       ordersByPartner,
       ordersByScanningMode,
       recentOrders,
@@ -98,6 +99,10 @@ export class DashboardService {
             include: { product: true }
           }
         }
+      }).catch(() => []), // Handle empty results
+      prisma.order.groupBy({
+        by: ['status'],
+        _count: { status: true }
       }).catch(() => []), // Handle empty results
       prisma.order.groupBy({
         by: ['partner'],
@@ -171,38 +176,11 @@ export class DashboardService {
       };
     }) : [];
 
-    // Calculate order status based on dates
-    const getOrderStatus = (order: any) => {
-      const now = new Date();
-      const scheduleDate = new Date(order.schedule);
-      const estimateDate = new Date(order.estimateDate);
-      const approachDate = new Date(order.dateOfApproach);
-      
-      if (now < scheduleDate) {
-        return 'SCHEDULED';
-      } else if (now >= scheduleDate && now < estimateDate) {
-        return 'IN_PROGRESS';
-      } else if (now >= estimateDate && now < approachDate) {
-        return 'READY_FOR_DELIVERY';
-      } else if (now >= approachDate) {
-        return 'COMPLETED';
-      } else {
-        return 'NEW';
-      }
-    };
-
-    // Calculate orders by status
-    const ordersByStatus = Array.isArray(ordersWithRevenue) ? 
-      ordersWithRevenue.reduce((acc, order) => {
-        const status = getOrderStatus(order);
-        const existing = acc.find(item => item.status === status);
-        if (existing) {
-          existing.count++;
-        } else {
-          acc.push({ status, count: 1 });
-        }
-        return acc;
-      }, [] as Array<{ status: string; count: number }>) : [];
+    // Use actual order status from database
+    const ordersByStatusData = Array.isArray(ordersByStatus) ? ordersByStatus.map(o => ({
+      status: o.status,
+      count: o._count.status
+    })) : [];
 
     return {
       users: {
@@ -226,10 +204,10 @@ export class DashboardService {
         total: totalOrders,
         totalRevenue,
         averageOrderValue,
-        byStatus: ordersByStatus,
+        byStatus: ordersByStatusData,
         byPartner: revenueByPartner,
         byScanningMode: Array.isArray(ordersByScanningMode) ? ordersByScanningMode.map(o => ({
-          mode: o.scanningMode,
+          mode: o.scanningMode ?? 'Unknown',
           count: o._count.scanningMode
         })) : [],
         recentOrders,

@@ -8,33 +8,36 @@ export async function createOrderController(req: Request, res: Response) {
   try {
     const {
       invoiceNumber,
-      patientId,
+      patient, // Changed from patientId to patient object
       doctorId,
       clinicId,
       referredDoctorId,
       partner,
-      scanningMode,
-      schedule,
-      enterRemark,
       estimateDate,
-      dateOfApproach,
       orderProducts,
       files,
       status
     } = req.body;
 
-    if (!invoiceNumber || !patientId || !doctorId || !clinicId || !partner || 
-        !scanningMode || !schedule || !enterRemark || !estimateDate || !dateOfApproach || 
+    if (!invoiceNumber || !patient || !doctorId || !clinicId || !partner || 
+        !estimateDate || 
         !orderProducts || !Array.isArray(orderProducts) || orderProducts.length === 0) {
       return res.status(400).json({
-        message: 'All required fields must be provided: invoiceNumber, patientId, doctorId, clinicId, partner, scanningMode, schedule, enterRemark, estimateDate, dateOfApproach, and orderProducts (non-empty array)'
+        message: 'All required fields must be provided: invoiceNumber, patient (with name, age, gender), doctorId, clinicId, partner, estimateDate, and orderProducts (non-empty array)'
+      });
+    }
+
+    // Validate patient data
+    if (!patient.name || patient.age === undefined || !patient.gender) {
+      return res.status(400).json({
+        message: 'Patient data must include: name, age, and gender'
       });
     }
 
     // Validate each order product
     for (const product of orderProducts) {
       if (!product.productId || !product.workType || !product.workSpecification || !product.shadeType || !product.finishingInstructions ||
-          !product.componentDetails || !product.incaseOfAllAbutments || !product.occlusalStaining ||
+          product.componentDetails === undefined || product.componentDetails === null || !product.incaseOfAllAbutments || !product.occlusalStaining ||
           !product.ponticDesign || !product.repeatCorrections || !product.enterReason) {
         return res.status(400).json({
           message: 'Each order product must have all required fields: productId, workType, workSpecification, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason'
@@ -55,16 +58,17 @@ export async function createOrderController(req: Request, res: Response) {
 
     const orderData: CreateOrderData = {
       invoiceNumber,
-      patientId,
+      patient: {
+        name: patient.name,
+        age: typeof patient.age === 'string' ? parseInt(patient.age, 10) : patient.age,
+        gender: patient.gender,
+        contactNumber: patient.contactNumber,
+      },
       doctorId,
       clinicId,
       referredDoctorId,
       partner,
-      scanningMode,
-      schedule: new Date(schedule),
-      enterRemark,
       estimateDate: new Date(estimateDate),
-      dateOfApproach: new Date(dateOfApproach),
       orderProducts,
       files,
       status,
@@ -124,6 +128,30 @@ export async function getOrdersListController(req: Request, res: Response) {
   try {
     const page = parseInt(req.query.page as string) || 0;
     const limit = parseInt(req.query.limit as string) || 20;
+    const {
+      search,
+      invoiceNumber,
+      status,
+      patientId,
+      doctorId,
+      clinicId,
+      referredDoctorId,
+      patientName,
+      doctorName,
+      clinicName,
+      partner,
+      scanningMode,
+      scheduleFrom,
+      scheduleTo,
+      estimateDateFrom,
+      estimateDateTo,
+      dateOfApproachFrom,
+      dateOfApproachTo,
+      createdAtFrom,
+      createdAtTo,
+      sortBy,
+      sortOrder,
+    } = req.query;
 
     if (page < 0 || limit < 1 || limit > 100) {
       return res.status(400).json({ 
@@ -131,7 +159,32 @@ export async function getOrdersListController(req: Request, res: Response) {
       });
     }
 
-    const result = await orderService.getOrdersList(page, limit);
+    const result = await orderService.getOrdersList({
+      page,
+      limit,
+      search: search as string | undefined,
+      invoiceNumber: invoiceNumber as string | undefined,
+      status: status as string | undefined,
+      patientId: patientId as string | undefined,
+      doctorId: doctorId as string | undefined,
+      clinicId: clinicId as string | undefined,
+      referredDoctorId: referredDoctorId as string | undefined,
+      patientName: patientName as string | undefined,
+      doctorName: doctorName as string | undefined,
+      clinicName: clinicName as string | undefined,
+      partner: partner as string | undefined,
+      scanningMode: scanningMode as string | undefined,
+      scheduleFrom: scheduleFrom as string | undefined,
+      scheduleTo: scheduleTo as string | undefined,
+      estimateDateFrom: estimateDateFrom as string | undefined,
+      estimateDateTo: estimateDateTo as string | undefined,
+      dateOfApproachFrom: dateOfApproachFrom as string | undefined,
+      dateOfApproachTo: dateOfApproachTo as string | undefined,
+      createdAtFrom: createdAtFrom as string | undefined,
+      createdAtTo: createdAtTo as string | undefined,
+      sortBy: sortBy as string | undefined,
+      sortOrder: sortOrder as 'asc' | 'desc' | undefined,
+    });
     return res.json(result);
   } catch (error) {
     console.error('Error fetching orders list:', error);
@@ -195,6 +248,47 @@ export async function updateOrderController(req: Request, res: Response) {
     return res.json(updatedOrder);
   } catch (error) {
     console.error('Error updating order:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+export async function updateOrderStatusController(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { status, remarks } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ message: 'Order ID is required' });
+    }
+
+    if (!status) {
+      return res.status(400).json({ message: 'Status is required' });
+    }
+
+    // Check if order exists
+    const existingOrder = await orderService.getOrderById(id);
+    if (!existingOrder) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    // Update only the status
+    const updateData: UpdateOrderData = {
+      status,
+    };
+
+    const updatedOrder = await orderService.updateOrder(
+      id,
+      updateData,
+      (req as any).user?.id,
+      remarks || `Order status updated to ${status}`
+    );
+
+    return res.json({
+      message: 'Order status updated successfully',
+      data: updatedOrder,
+    });
+  } catch (error) {
+    console.error('Error updating order status:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }

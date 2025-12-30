@@ -38,3 +38,4 @@ router.delete('/order/:orderId/all', removeAllOrderAssignmentsController);
 router.get('/stats', getAssignmentStatsController);
 
 export default router;
+

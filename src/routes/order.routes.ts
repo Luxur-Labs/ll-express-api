@@ -7,6 +7,7 @@ import {
   getAllOrdersController,
   getOrdersListController,
   updateOrderController,
+  updateOrderStatusController,
   deleteOrderController,
   getOrdersByPatientController,
   getOrdersByDoctorController,
@@ -17,7 +18,7 @@ import {
 } from '../controllers/order.controller';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
-import { createOrderSchema, updateOrderSchema, dateRangeQuerySchema } from '../schemas/order.schema';
+import { createOrderSchema, updateOrderSchema, updateOrderStatusSchema, dateRangeQuerySchema, ordersListQuerySchema } from '../schemas/order.schema';
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.use(authorizeRoles('SUPER_ADMIN'));
 // CRUD operations for orders
 router.post('/', validate(createOrderSchema), createOrderController);
 router.get('/', getAllOrdersController);
-router.get('/list', getOrdersListController);
+router.get('/list', validate(ordersListQuerySchema), getOrdersListController);
 router.get('/invoice/:invoiceNumber', getOrderByInvoiceNumberController);
 router.get('/patient/:patientId', getOrdersByPatientController);
 router.get('/doctor/:doctorId', getOrdersByDoctorController);
@@ -38,6 +39,7 @@ router.get('/scanning-mode/:scanningMode', getOrdersByScanningModeController);
 router.get('/date-range', validate(dateRangeQuerySchema), getOrdersByDateRangeController);
 router.get('/:id', getOrderByIdController);
 router.put('/:id', validate(updateOrderSchema), updateOrderController);
+router.patch('/:id/status', validate(updateOrderStatusSchema), updateOrderStatusController);
 router.delete('/:id', deleteOrderController);
 
 export default router;

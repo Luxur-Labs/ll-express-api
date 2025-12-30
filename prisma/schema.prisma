@@ -123,11 +123,11 @@ model Order {
   
   // Additional fields
   partner         String
-  scanningMode    String
-  schedule        DateTime
-  enterRemark     String
+  scanningMode    String?
+  schedule        DateTime?
+  enterRemark     String?
   estimateDate    DateTime
-  dateOfApproach  DateTime
+  dateOfApproach  DateTime?
   status          String @default("NEW")
   applicationStatus String @default("NEW")
   
