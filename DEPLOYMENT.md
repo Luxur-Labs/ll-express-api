@@ -382,13 +382,21 @@ npm run dev
 
 ## Step 6: Configure Nginx
 
+### Option A: HTTP Only (No SSL) - For Development/Testing
+
+Use this if you don't have a domain or SSL certificates yet:
+
 ```bash
-# Copy the Nginx configuration
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/ll-express-api
+# Copy the HTTP-only Nginx configuration
+sudo cp deploy/nginx.conf.http /etc/nginx/sites-available/ll-express-api
 sudo ln -s /etc/nginx/sites-available/ll-express-api /etc/nginx/sites-enabled/
 
 # Remove default site (optional)
 sudo rm /etc/nginx/sites-enabled/default
+
+# Edit the config to set your EC2 IP or domain
+sudo nano /etc/nginx/sites-available/ll-express-api
+# Update: server_name _; to server_name your-ec2-ip; or server_name your-domain.com;
 
 # Test Nginx configuration
 sudo nginx -t
@@ -397,25 +405,65 @@ sudo nginx -t
 sudo systemctl restart nginx
 ```
 
-Edit the Nginx config to match your domain:
+### Option B: With SSL (Production)
+
+Use this if you have a domain and want SSL:
 
 ```bash
+# Copy the SSL Nginx configuration
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/ll-express-api
+sudo ln -s /etc/nginx/sites-available/ll-express-api /etc/nginx/sites-enabled/
+
+# Remove default site (optional)
+sudo rm /etc/nginx/sites-enabled/default
+
+# Edit the config to set your domain
 sudo nano /etc/nginx/sites-available/ll-express-api
+# Update: server_name your-domain.com www.your-domain.com;
+# Update: ssl_certificate and ssl_certificate_key paths
+
+# Test Nginx configuration
+sudo nginx -t
+
+# Restart Nginx
+sudo systemctl restart nginx
 ```
 
-Update `server_name` with your domain or EC2 public IP.
+**Important:** If you get SSL certificate errors, you need to either:
+1. Use `nginx.conf.http` (HTTP-only) instead, OR
+2. Set up SSL certificates first (see Step 7)
 
 ## Step 7: Setup SSL with Let's Encrypt (Optional but Recommended)
 
+**Prerequisites:**
+- You must have a domain name pointing to your EC2 instance
+- Port 80 must be open in your security group
+- If using HTTP-only config, switch to SSL config first
+
 ```bash
-# Install Certbot
+# Install Certbot (if not already installed)
 sudo apt install -y certbot python3-certbot-nginx
+
+# If you're using HTTP-only config, switch to SSL config first
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/ll-express-api
+sudo nano /etc/nginx/sites-available/ll-express-api
+# Update server_name with your domain (remove placeholder paths for now)
+sudo nginx -t && sudo systemctl reload nginx
 
 # Get SSL certificate (replace with your domain)
 sudo certbot --nginx -d your-domain.com -d www.your-domain.com
 
-# Certbot will automatically configure Nginx and set up auto-renewal
+# Certbot will automatically:
+# - Generate SSL certificates
+# - Update Nginx config with correct certificate paths
+# - Set up auto-renewal
+# - Configure HTTP to HTTPS redirect
+
+# Verify auto-renewal is set up
+sudo certbot renew --dry-run
 ```
+
+**Note:** If you don't have a domain yet, you can skip SSL and use HTTP-only configuration. You can always add SSL later.
 
 ## Step 8: Firewall Configuration
 

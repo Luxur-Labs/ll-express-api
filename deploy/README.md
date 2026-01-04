@@ -69,6 +69,12 @@ Script to fix PostgreSQL schema permissions. Run this if you get "permission den
 ### `DATABASE_TROUBLESHOOTING.md`
 Comprehensive troubleshooting guide for common PostgreSQL and Prisma database issues, including permission errors, connection problems, and migration issues.
 
+### `nginx.conf.http`
+HTTP-only Nginx configuration (no SSL). Use this for development/testing or when you don't have SSL certificates yet.
+
+### `NGINX_SETUP.md`
+Complete guide for setting up Nginx with or without SSL, troubleshooting common issues, and switching between HTTP and SSL configurations.
+
 ## Root Directory Files
 
 ### `ecosystem.config.js`
