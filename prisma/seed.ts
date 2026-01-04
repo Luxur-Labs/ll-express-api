@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  const [qc, , cad] = await Promise.all([
+  const [qc, technician, dispatcher, cadTechnician, camTechnician] = await Promise.all([
     prisma.employeeType.upsert({ where: { name: 'QC' }, update: {}, create: { name: 'QC' } }),
     prisma.employeeType.upsert({ where: { name: 'TECHNICIAN' }, update: {}, create: { name: 'TECHNICIAN' } }),
     prisma.employeeType.upsert({ where: { name: 'DISPATCHER' }, update: {}, create: { name: 'DISPATCHER' } }),
@@ -25,7 +25,7 @@ async function main() {
       passwordHash,
       role: 'SUPER_ADMIN',
       employeeTypeId: qc.id,
-      technicianGroupId: cad.id,
+      technicianGroupId: cadTechnician.id,
     }
   });
 
