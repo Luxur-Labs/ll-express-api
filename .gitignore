@@ -4,3 +4,5 @@ dist
 coverage 
 npm-debug.log*
 uploads
+logs
+*.log
