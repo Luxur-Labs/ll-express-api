@@ -1,5 +1,5 @@
-import { prisma } from '../utils/prisma';
 import { createOrderTransition } from '../utils/orderTransitions';
+import { prisma } from '../utils/prisma';
 
 export interface CreateOrderProductData {
   productId: string;
@@ -91,8 +91,8 @@ export class OrderService {
       }
     }
     
-    // Generate user-friendly order ID
-    const orderId = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+    // Generate formatted order ID (e.g., ODLUXDDMMYY01)
+    const orderId = await this.generateOrderId();
     
     // Create or find patient
     // First, try to find existing patient by name, age, and gender
@@ -879,6 +879,25 @@ export class OrderService {
     return await prisma.order.delete({
       where: { id },
     });
+  }
+
+  private async generateOrderId() {
+    const now = new Date();
+    const day = now.getDate().toString().padStart(2, '0');
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const year = now.getFullYear().toString().slice(-2);
+    const prefix = `ODLUX${day}${month}${year}`;
+
+    const lastOrder = await prisma.order.findFirst({
+      where: { id: { startsWith: prefix } },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const lastSequence = lastOrder?.id ? parseInt(lastOrder.id.slice(prefix.length), 10) : 0;
+    const nextSequence = Number.isFinite(lastSequence) ? lastSequence + 1 : 1;
+
+    return `${prefix}${nextSequence.toString().padStart(2, '0')}`;
   }
 }
 
