@@ -5,11 +5,11 @@ const productService = new ProductService();
 
 export async function createProductController(req: Request, res: Response) {
   try {
-    const { product, warranty, price, discount } = req.body;
+    const { name, code, warranty, price, discount } = req.body;
 
-    if (!product || !warranty || price === undefined) {
+    if (!name || price === undefined) {
       return res.status(400).json({
-        message: 'product, warranty, and price are required'
+        message: 'name and price are required'
       });
     }
 
@@ -26,7 +26,8 @@ export async function createProductController(req: Request, res: Response) {
     }
 
     const productData: CreateProductData = {
-      product,
+      name,
+      code,
       warranty,
       price,
       discount,
@@ -74,7 +75,7 @@ export async function getAllProductsController(req: Request, res: Response) {
 export async function updateProductController(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const { product, warranty, price, discount } = req.body;
+    const { name, code, warranty, price, discount } = req.body;
 
     if (!id) {
       return res.status(400).json({ message: 'Product ID is required' });
@@ -101,7 +102,8 @@ export async function updateProductController(req: Request, res: Response) {
     }
 
     const updateData: UpdateProductData = {};
-    if (product !== undefined) updateData.product = product;
+    if (name !== undefined) updateData.name = name;
+    if (code !== undefined) updateData.code = code;
     if (warranty !== undefined) updateData.warranty = warranty;
     if (price !== undefined) updateData.price = price;
     if (discount !== undefined) updateData.discount = discount;

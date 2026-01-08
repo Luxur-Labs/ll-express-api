@@ -1,14 +1,16 @@
 import { prisma } from '../utils/prisma';
 
 export interface CreateProductData {
-  product: string;
-  warranty: string;
+  name: string;
+  code?: string;
+  warranty?: string;
   price: number;
   discount?: number;
 }
 
 export interface UpdateProductData {
-  product?: string;
+  name?: string;
+  code?: string;
   warranty?: string;
   price?: number;
   discount?: number;
@@ -18,7 +20,8 @@ export class ProductService {
   async createProduct(data: CreateProductData) {
     return await prisma.product.create({
       data: {
-        product: data.product,
+        name: data.name,
+        code: data.code,
         warranty: data.warranty,
         price: data.price,
         discount: data.discount || 0,
@@ -41,7 +44,8 @@ export class ProductService {
   async updateProduct(id: string, data: UpdateProductData) {
     const updateData: any = {};
     
-    if (data.product !== undefined) updateData.product = data.product;
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.code !== undefined) updateData.code = data.code;
     if (data.warranty !== undefined) updateData.warranty = data.warranty;
     if (data.price !== undefined) updateData.price = data.price;
     if (data.discount !== undefined) updateData.discount = data.discount;
@@ -75,12 +79,13 @@ export class ProductService {
     return await prisma.product.findMany({
       select: {
         id: true,
-        product: true,
+        name: true,
+        code: true,
         warranty: true,
         price: true,
         discount: true,
       },
-      orderBy: { product: 'asc' },
+      orderBy: { name: 'asc' },
     });
   }
 }

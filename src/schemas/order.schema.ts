@@ -28,13 +28,13 @@ const stringSchema = (message: string, maxLength?: number) => {
 
 const orderProductSchema = z.object({
   productId: stringSchema('Product ID is required'),
-  workType: stringSchema('Work type is required', 255),
-  workSpecification: stringSchema('Work specification is required', 500),
+  workType: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Work type too long').optional()),
+  workSpecification: z.preprocess((val) => val === null ? undefined : val, z.string().max(500, 'Work specification too long').optional()),
   shadeType: stringSchema('Shade type is required', 100),
   finishingInstructions: stringSchema('Finishing instructions are required', 500),
   componentDetails: z.preprocess(
     (val) => val === null ? undefined : val,
-    z.string().max(500, 'Component details too long')
+    z.string().min(1, 'Component details is required').max(500, 'Component details too long')
   ),
   incaseOfAllAbutments: stringSchema('In case of all abutments is required', 500),
   occlusalStaining: stringSchema('Occlusal staining is required', 100),
@@ -42,6 +42,11 @@ const orderProductSchema = z.object({
   repeatCorrections: stringSchema('Repeat corrections is required', 500),
   enterReason: stringSchema('Enter reason is required', 500),
   unitNumbers: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Unit numbers too long').optional()),
+});
+
+// Schema for update - allows ID to reference existing orderProduct
+const updateOrderProductSchema = orderProductSchema.extend({
+  id: z.string().optional(), // ID of existing orderProduct to update
 });
 
 const fileSchema = z.object({
@@ -53,6 +58,11 @@ const fileSchema = z.object({
   fileCategory: z.string().max(50, 'File category too long').optional(),
   fileDescription: z.string().max(1000, 'File description too long').optional(),
   uploadedBy: z.string().optional(),
+});
+
+// Schema for update - allows ID to reference existing file
+const updateFileSchema = fileSchema.extend({
+  id: z.string().optional(), // ID of existing file to update
 });
 
 const patientDataSchema = z.object({
@@ -84,18 +94,21 @@ export const createOrderSchema = z.object({
 
 export const updateOrderSchema = z.object({
   body: z.object({
-    invoiceNumber: z.string().min(1, 'Invoice number is required').max(255, 'Invoice number too long').optional(),
-    patientId: z.string().min(1, 'Patient ID is required').optional(),
-    doctorId: z.string().min(1, 'Doctor ID is required').optional(),
-    clinicId: z.string().min(1, 'Clinic ID is required').optional(),
-    referredDoctorId: z.string().optional(),
-    partner: z.string().min(1, 'Partner is required').max(255, 'Partner name too long').optional(),
-    scanningMode: z.string().min(1, 'Scanning mode is required').max(255, 'Scanning mode too long').optional(),
-    schedule: z.string().datetime('Invalid schedule date format').optional(),
-    enterRemark: z.string().min(1, 'Enter remark is required').optional(),
-    estimateDate: z.string().datetime('Invalid estimate date format').optional(),
-    dateOfApproach: z.string().datetime('Invalid date of approach format').optional(),
+    invoiceNumber: stringSchema('Invoice number is required', 255).optional(),
+    patientId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
+    patient: patientDataSchema.optional(), // Support updating patient info directly
+    doctorId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
+    clinicId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
+    referredDoctorId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
+    partner: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Partner name too long').optional()),
+    scanningMode: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Scanning mode too long').optional()),
+    schedule: z.preprocess((val) => val === null || val === '' ? undefined : val, z.string().optional()),
+    enterRemark: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
+    estimateDate: z.preprocess((val) => val === null ? undefined : val, z.string().datetime('Invalid estimate date format').optional()),
+    dateOfApproach: z.preprocess((val) => val === null || val === '' ? undefined : val, z.string().optional()),
     status: z.enum(ORDER_STATUSES).optional(),
+    orderProducts: z.array(updateOrderProductSchema).optional(), // Support updating order products with IDs
+    files: z.array(updateFileSchema).optional(), // Support updating files with IDs
   }),
   query: z.object({}).optional(),
   params: z.object({}).optional(),
@@ -134,6 +147,9 @@ export const ordersListQuerySchema = z.object({
     // Invoice number filter (exact or partial match)
     invoiceNumber: z.string().max(255, 'Invoice number too long').optional(),
     
+    // Order ID filter
+    orderId: z.string().max(255, 'Order ID too long').optional(),
+    
     // Status filter (single or comma-separated multiple)
     status: z.string().optional(),
     
@@ -142,6 +158,9 @@ export const ordersListQuerySchema = z.object({
     doctorId: z.string().uuid('Invalid doctor ID format').optional(),
     clinicId: z.string().uuid('Invalid clinic ID format').optional(),
     referredDoctorId: z.string().uuid('Invalid referred doctor ID format').optional(),
+    
+    // Product code filter
+    productCode: z.string().max(255, 'Product code too long').optional(),
     
     // Name filters (searches by name, case-insensitive partial match)
     patientName: z.string().max(255, 'Patient name too long').optional(),

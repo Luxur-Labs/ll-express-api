@@ -3,8 +3,8 @@ import { createOrderTransition } from '../utils/orderTransitions';
 
 export interface CreateOrderProductData {
   productId: string;
-  workType: string;
-  workSpecification: string;
+  workType?: string;
+  workSpecification?: string;
   shadeType: string;
   finishingInstructions: string;
   componentDetails: string;
@@ -16,6 +16,10 @@ export interface CreateOrderProductData {
   unitNumbers?: string;
 }
 
+export interface UpdateOrderProductData extends CreateOrderProductData {
+  id?: string; // ID of existing orderProduct to update
+}
+
 export interface CreateFileData {
   fileName: string;
   fileSize?: number;
@@ -25,6 +29,10 @@ export interface CreateFileData {
   fileCategory?: string;
   fileDescription?: string;
   uploadedBy?: string;
+}
+
+export interface UpdateFileData extends CreateFileData {
+  id?: string; // ID of existing file to update
 }
 
 export interface CreatePatientData {
@@ -50,6 +58,7 @@ export interface CreateOrderData {
 export interface UpdateOrderData {
   invoiceNumber?: string;
   patientId?: string;
+  patient?: CreatePatientData; // Support updating patient info directly
   doctorId?: string;
   clinicId?: string;
   referredDoctorId?: string;
@@ -60,10 +69,28 @@ export interface UpdateOrderData {
   estimateDate?: Date;
   dateOfApproach?: Date;
   status?: 'NEW' | 'IN_PROGRESS' | 'UNCLAIMED' | 'DELAYED' | 'COMPLETED' | 'READY_FOR_DISPATCH' | 'DISPATCH_INITIATED' | 'DISPATCH_PARTNER_BOOKED' | 'ORDER_SHIPPED' | 'ORDER_DELIVERED';
+  orderProducts?: UpdateOrderProductData[]; // Support updating order products with IDs
+  files?: UpdateFileData[]; // Support updating files with IDs
 }
 
 export class OrderService {
   async createOrder(data: CreateOrderData) {
+    // Validate that orderProducts is not empty
+    if (!data.orderProducts || !Array.isArray(data.orderProducts) || data.orderProducts.length === 0) {
+      throw new Error('Order must have at least one product');
+    }
+    
+    // Validate each product has all required fields
+    for (const product of data.orderProducts) {
+      if (!product.productId || !product.shadeType || 
+          !product.finishingInstructions || 
+          product.componentDetails === undefined || product.componentDetails === null ||
+          !product.incaseOfAllAbutments || !product.occlusalStaining || !product.ponticDesign || 
+          !product.repeatCorrections || !product.enterReason) {
+        throw new Error('Each order product must have all required fields: productId, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason');
+      }
+    }
+    
     // Generate user-friendly order ID
     const orderId = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
     
@@ -101,20 +128,32 @@ export class OrderService {
         estimateDate: data.estimateDate,
         status: data.status || 'NEW',
         orderProducts: {
-          create: data.orderProducts.map(product => ({
-            productId: product.productId,
-            workType: product.workType,
-            workSpecification: product.workSpecification,
-            shadeType: product.shadeType,
-            finishingInstructions: product.finishingInstructions,
-            componentDetails: product.componentDetails,
-            incaseOfAllAbutments: product.incaseOfAllAbutments,
-            occlusalStaining: product.occlusalStaining,
-            ponticDesign: product.ponticDesign,
-            repeatCorrections: product.repeatCorrections,
-            enterReason: product.enterReason,
-            unitNumbers: product.unitNumbers,
-          }))
+          create: data.orderProducts.map(product => {
+            const productData: any = {
+              productId: product.productId,
+              shadeType: product.shadeType,
+              finishingInstructions: product.finishingInstructions,
+              componentDetails: product.componentDetails,
+              incaseOfAllAbutments: product.incaseOfAllAbutments,
+              occlusalStaining: product.occlusalStaining,
+              ponticDesign: product.ponticDesign,
+              repeatCorrections: product.repeatCorrections,
+              enterReason: product.enterReason,
+            };
+            
+            // Only include optional fields if they're provided
+            if (product.workType !== undefined) {
+              productData.workType = product.workType;
+            }
+            if (product.workSpecification !== undefined) {
+              productData.workSpecification = product.workSpecification;
+            }
+            if (product.unitNumbers !== undefined) {
+              productData.unitNumbers = product.unitNumbers;
+            }
+            
+            return productData;
+          })
         },
         files: data.files ? {
           create: data.files.map(file => ({
@@ -132,12 +171,33 @@ export class OrderService {
       include: {
         patient: true,
         doctor: true,
-        clinic: true,
+        clinic: {
+          select: {
+            id: true,
+            clinicName: true,
+            organizationId: true,
+            clientAddress: true,
+            contactNumber: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
         referredDoctor: true,
         orderProducts: {
           include: {
-            product: true,
-          }
+            product: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                warranty: true,
+                price: true,
+                discount: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
         },
         files: true,
       },
@@ -152,43 +212,130 @@ export class OrderService {
       remarks: 'Order created',
     });
 
-    return order;
+    // Convert Decimal fields to strings for JSON serialization
+    return {
+      ...order,
+      orderProducts: order.orderProducts.map(op => ({
+        ...op,
+        product: op.product ? {
+          ...op.product,
+          price: op.product.price.toString(),
+          discount: op.product.discount.toString(),
+        } : null,
+      })),
+    };
   }
 
   async getOrderById(id: string) {
-    return await prisma.order.findUnique({
+    const order = await prisma.order.findUnique({
       where: { id },
       include: {
         patient: true,
         doctor: true,
-        clinic: true,
+        clinic: {
+          select: {
+            id: true,
+            clinicName: true,
+            organizationId: true,
+            clientAddress: true,
+            contactNumber: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
         referredDoctor: true,
         orderProducts: {
           include: {
-            product: true,
-          }
+            product: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                warranty: true,
+                price: true,
+                discount: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
         },
         files: true,
       },
     });
+
+    // Convert Decimal fields to strings for JSON serialization
+    if (order) {
+      return {
+        ...order,
+        orderProducts: order.orderProducts.map(op => ({
+          ...op,
+          product: op.product ? {
+            ...op.product,
+            price: op.product.price.toString(),
+            discount: op.product.discount.toString(),
+          } : null,
+        })),
+      };
+    }
+
+    return order;
   }
 
   async getOrderByInvoiceNumber(invoiceNumber: string) {
-    return await prisma.order.findUnique({
+    const order = await prisma.order.findUnique({
       where: { invoiceNumber },
       include: {
         patient: true,
         doctor: true,
-        clinic: true,
+        clinic: {
+          select: {
+            id: true,
+            clinicName: true,
+            organizationId: true,
+            clientAddress: true,
+            contactNumber: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
         referredDoctor: true,
         orderProducts: {
           include: {
-            product: true,
-          }
+            product: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                warranty: true,
+                price: true,
+                discount: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
         },
         files: true,
       },
     });
+
+    // Convert Decimal fields to strings for JSON serialization
+    if (order) {
+      return {
+        ...order,
+        orderProducts: order.orderProducts.map(op => ({
+          ...op,
+          product: op.product ? {
+            ...op.product,
+            price: op.product.price.toString(),
+            discount: op.product.discount.toString(),
+          } : null,
+        })),
+      };
+    }
+
+    return order;
   }
 
   async getOrdersList(filters: {
@@ -196,6 +343,7 @@ export class OrderService {
     limit?: number;
     search?: string;
     invoiceNumber?: string;
+    orderId?: string;
     status?: string;
     patientId?: string;
     doctorId?: string;
@@ -206,6 +354,7 @@ export class OrderService {
     clinicName?: string;
     partner?: string;
     scanningMode?: string;
+    productCode?: string;
     scheduleFrom?: string;
     scheduleTo?: string;
     estimateDateFrom?: string;
@@ -228,6 +377,14 @@ export class OrderService {
     if (filters.invoiceNumber) {
       whereClause.invoiceNumber = {
         contains: filters.invoiceNumber,
+        mode: 'insensitive',
+      };
+    }
+    
+    // Order ID filter (contains, case-insensitive)
+    if (filters.orderId) {
+      whereClause.id = {
+        contains: filters.orderId,
         mode: 'insensitive',
       };
     }
@@ -285,6 +442,20 @@ export class OrderService {
       whereClause.scanningMode = {
         contains: filters.scanningMode,
         mode: 'insensitive',
+      };
+    }
+    
+    // Product code filter (filters orders that have products with matching code)
+    if (filters.productCode) {
+      whereClause.orderProducts = {
+        some: {
+          product: {
+            code: {
+              contains: filters.productCode,
+              mode: 'insensitive',
+            },
+          },
+        },
       };
     }
     
@@ -349,7 +520,8 @@ export class OrderService {
             include: {
               product: {
                 select: {
-                  product: true,
+                  name: true,
+                  code: true,
                   price: true,
                 }
               }
@@ -373,7 +545,7 @@ export class OrderService {
           createdOn: order.createdAt.getTime(),
           amount: order.orderProducts.reduce((sum: number, op: any) => sum + Number(op.product.price), 0),
           assignedGroup: null,
-          orderProducts: order.orderProducts.map((op: any) => `${op.product.product} (${op.workSpecification})`).join(', '),
+          orderProducts: order.orderProducts.map((op: any) => op.product.code || '').filter((code: string) => code).join(', '),
           patientName: order.patient.name,
           doctorName: order.doctor.name,
           clinicName: order.clinic.clinicName,
@@ -388,47 +560,293 @@ export class OrderService {
   }
 
   async getAllOrders() {
-    return await prisma.order.findMany({
+    const orders = await prisma.order.findMany({
       include: {
         patient: true,
         doctor: true,
-        clinic: true,
+        clinic: {
+          select: {
+            id: true,
+            clinicName: true,
+            organizationId: true,
+            clientAddress: true,
+            contactNumber: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
         referredDoctor: true,
         orderProducts: {
           include: {
-            product: true,
-          }
+            product: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                warranty: true,
+                price: true,
+                discount: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
         },
         files: true,
       },
     });
+
+    // Convert Decimal fields to strings for JSON serialization
+    return orders.map(order => ({
+      ...order,
+      orderProducts: order.orderProducts.map(op => ({
+        ...op,
+        product: op.product ? {
+          ...op.product,
+          price: op.product.price.toString(),
+          discount: op.product.discount.toString(),
+        } : null,
+      })),
+    }));
   }
 
   async updateOrder(id: string, data: UpdateOrderData, transitionedBy?: string, remarks?: string) {
     // Get current order status before update
     const currentOrder = await prisma.order.findUnique({
       where: { id },
-      select: { status: true },
+      select: { status: true, patientId: true },
     });
 
     if (!currentOrder) {
       throw new Error('Order not found');
     }
 
+    // Handle patient update if provided
+    let patientId = data.patientId;
+    if (data.patient) {
+      // Find or create patient (same logic as createOrder)
+      let patient = await prisma.patient.findFirst({
+        where: {
+          name: data.patient.name,
+          age: data.patient.age,
+          gender: data.patient.gender,
+        },
+      });
+
+      if (!patient) {
+        patient = await prisma.patient.create({
+          data: {
+            name: data.patient.name,
+            age: data.patient.age,
+            gender: data.patient.gender,
+            contactNumber: data.patient.contactNumber,
+          },
+        });
+      } else if (data.patient.contactNumber !== undefined) {
+        // Update contact number if provided
+        patient = await prisma.patient.update({
+          where: { id: patient.id },
+          data: { contactNumber: data.patient.contactNumber },
+        });
+      }
+      patientId = patient.id;
+    }
+
+    // Build update data excluding nested fields
+    const updateData: any = {};
+    if (data.invoiceNumber !== undefined) updateData.invoiceNumber = data.invoiceNumber;
+    if (patientId !== undefined) updateData.patientId = patientId;
+    if (data.doctorId !== undefined) updateData.doctorId = data.doctorId;
+    if (data.clinicId !== undefined) updateData.clinicId = data.clinicId;
+    if (data.referredDoctorId !== undefined) updateData.referredDoctorId = data.referredDoctorId;
+    if (data.partner !== undefined) updateData.partner = data.partner;
+    if (data.scanningMode !== undefined) updateData.scanningMode = data.scanningMode;
+    if (data.schedule !== undefined) updateData.schedule = data.schedule || null;
+    if (data.enterRemark !== undefined) updateData.enterRemark = data.enterRemark;
+    if (data.estimateDate !== undefined) updateData.estimateDate = data.estimateDate;
+    if (data.dateOfApproach !== undefined) updateData.dateOfApproach = data.dateOfApproach || null;
+    if (data.status !== undefined) updateData.status = data.status;
+
+    // Handle orderProducts update if provided
+    if (data.orderProducts !== undefined) {
+      // Separate products to update vs create
+      const productsToUpdate = data.orderProducts.filter(p => p.id);
+      const productsToCreate = data.orderProducts.filter(p => !p.id);
+      const productIdsToKeep = productsToUpdate.map(p => p.id!);
+
+      // Get existing product IDs for this order
+      const existingProducts = await prisma.orderProduct.findMany({
+        where: { orderId: id },
+        select: { id: true },
+      });
+      const existingProductIds = existingProducts.map(p => p.id);
+
+      // Delete products that are not in the update list
+      const productIdsToDelete = existingProductIds.filter(id => !productIdsToKeep.includes(id));
+      if (productIdsToDelete.length > 0) {
+        await prisma.orderProduct.deleteMany({
+          where: { id: { in: productIdsToDelete } },
+        });
+      }
+
+      // Update existing products
+      const updateOperations = productsToUpdate.map(product => {
+        const updateProductData: any = {
+          productId: product.productId,
+          shadeType: product.shadeType,
+          finishingInstructions: product.finishingInstructions,
+          componentDetails: product.componentDetails,
+          incaseOfAllAbutments: product.incaseOfAllAbutments,
+          occlusalStaining: product.occlusalStaining,
+          ponticDesign: product.ponticDesign,
+          repeatCorrections: product.repeatCorrections,
+          enterReason: product.enterReason,
+        };
+        
+        // Only include optional fields if they're provided
+        if (product.workType !== undefined) {
+          updateProductData.workType = product.workType;
+        }
+        if (product.workSpecification !== undefined) {
+          updateProductData.workSpecification = product.workSpecification;
+        }
+        if (product.unitNumbers !== undefined) {
+          updateProductData.unitNumbers = product.unitNumbers;
+        }
+        
+        return prisma.orderProduct.update({
+          where: { id: product.id! },
+          data: updateProductData,
+        });
+      });
+      await Promise.all(updateOperations);
+
+      // Create new products
+      if (productsToCreate.length > 0) {
+        updateData.orderProducts = {
+          create: productsToCreate.map(product => {
+            const productData: any = {
+              productId: product.productId,
+              shadeType: product.shadeType,
+              finishingInstructions: product.finishingInstructions,
+              componentDetails: product.componentDetails,
+              incaseOfAllAbutments: product.incaseOfAllAbutments,
+              occlusalStaining: product.occlusalStaining,
+              ponticDesign: product.ponticDesign,
+              repeatCorrections: product.repeatCorrections,
+              enterReason: product.enterReason,
+            };
+            
+            // Only include optional fields if they're provided
+            if (product.workType !== undefined) {
+              productData.workType = product.workType;
+            }
+            if (product.workSpecification !== undefined) {
+              productData.workSpecification = product.workSpecification;
+            }
+            if (product.unitNumbers !== undefined) {
+              productData.unitNumbers = product.unitNumbers;
+            }
+            
+            return productData;
+          }),
+        };
+      }
+    }
+
+    // Handle files update if provided
+    if (data.files !== undefined) {
+      // Separate files to update vs create
+      const filesToUpdate = data.files.filter(f => f.id);
+      const filesToCreate = data.files.filter(f => !f.id);
+      const fileIdsToKeep = filesToUpdate.map(f => f.id!);
+
+      // Get existing file IDs for this order
+      const existingFiles = await prisma.file.findMany({
+        where: { orderId: id },
+        select: { id: true },
+      });
+      const existingFileIds = existingFiles.map(f => f.id);
+
+      // Delete files that are not in the update list
+      const fileIdsToDelete = existingFileIds.filter(id => !fileIdsToKeep.includes(id));
+      if (fileIdsToDelete.length > 0) {
+        await prisma.file.deleteMany({
+          where: { id: { in: fileIdsToDelete } },
+        });
+      }
+
+      // Update existing files
+      const updateOperations = filesToUpdate.map(file =>
+        prisma.file.update({
+          where: { id: file.id! },
+          data: {
+            fileName: file.fileName,
+            fileSize: file.fileSize,
+            fileType: file.fileType,
+            fileExtension: file.fileExtension,
+            s3Key: file.s3Key,
+            fileCategory: file.fileCategory,
+            fileDescription: file.fileDescription,
+            uploadedBy: file.uploadedBy,
+          },
+        })
+      );
+      await Promise.all(updateOperations);
+
+      // Create new files
+      if (filesToCreate.length > 0) {
+        updateData.files = {
+          create: filesToCreate.map(file => ({
+            fileName: file.fileName,
+            fileSize: file.fileSize,
+            fileType: file.fileType,
+            fileExtension: file.fileExtension,
+            s3Key: file.s3Key,
+            fileCategory: file.fileCategory,
+            fileDescription: file.fileDescription,
+            uploadedBy: file.uploadedBy,
+          })),
+        };
+      }
+    }
+
     // Update the order
     const updatedOrder = await prisma.order.update({
       where: { id },
-      data,
+      data: updateData,
       include: {
         patient: true,
         doctor: true,
-        clinic: true,
+        clinic: {
+          select: {
+            id: true,
+            clinicName: true,
+            organizationId: true,
+            clientAddress: true,
+            contactNumber: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
         referredDoctor: true,
         orderProducts: {
           include: {
-            product: true,
-          }
+            product: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                warranty: true,
+                price: true,
+                discount: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
         },
+        files: true,
       },
     });
 
@@ -443,7 +861,18 @@ export class OrderService {
       });
     }
 
-    return updatedOrder;
+    // Convert Decimal fields to strings for JSON serialization
+    return {
+      ...updatedOrder,
+      orderProducts: updatedOrder.orderProducts.map(op => ({
+        ...op,
+        product: op.product ? {
+          ...op.product,
+          price: op.product.price.toString(),
+          discount: op.product.discount.toString(),
+        } : null,
+      })),
+    };
   }
 
   async deleteOrder(id: string) {

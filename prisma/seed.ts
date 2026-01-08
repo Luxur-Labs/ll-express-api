@@ -29,109 +29,101 @@ async function main() {
     }
   });
 
-  // Helper function to parse price string to number
-  const parsePrice = (priceStr: string): number => {
-    // Remove all non-numeric characters except decimal point and minus sign
-    // Handle ranges like "499-1199" by taking the first value
-    const cleaned = priceStr.split('-')[0].replace(/[^\d.]/g, '');
-    const parsed = parseFloat(cleaned);
-    return isNaN(parsed) ? 0 : parsed;
-  };
+  // Delete all existing products
+  const deletedCount = await prisma.product.deleteMany({});
+  console.log(`🗑️  Deleted ${deletedCount.count} existing products`);
 
-  // Product data (filtering out deleted items)
-  const products = [
-    { productName: "key-keyway prosthesis", warranty: "string", price: "2499" },
-    { productName: "equator with ot cap", warranty: "string", price: "4999" },
-    { productName: "locator with ot cap (Casted metal coping with ceramic layering)", warranty: "5 Years", price: "6999" },
-    { productName: "haggers attachments", warranty: "string", price: "1499" },
-    { productName: "zirconia", warranty: "string", price: "2999" },
-    { productName: "dmls co-cr", warranty: "string", price: "1499" },
-    { productName: "titanium dmls", warranty: "string", price: "1999" },
-    { productName: "dmls metal ceramic(screw-retained crown with custom-abutment and screw)", warranty: "5 Years", price: "1999" },
-    { productName: "dmls metal ceramic(screw-retained crown with custom-abutment and screw)", warranty: "10Years", price: "2499" },
-    { productName: "zirconia crown with dmls co-cr (screw-retained custom-abutment with screw)", warranty: "15 Years", price: "3299" },
-    { productName: "IPS eMAX Zir CAD Prime  zirconia crown with dmls co-cr(screw-retained custom-abutment with screw)", warranty: "15 Years", price: "4999" },
-    { productName: "IPS eMAX Zir CAD Prime zirconia crown with milled zirconia(screw-retained abutment with screw)", warranty: "15 Years", price: "6999" },
-    { productName: "luxur full arch zirconia elite(Highly Transluscent- Full contour monolithic Gradient Zirconia by Ivoclar- eMAX Zircad Prime milled in  Ivoclar's PM7 machine fused to eMAX ceram porcelain layering on the anteriors for All-On-X cases)", warranty: "string", price: "74999" },
-    { productName: "luxur PFM full arch pro(Screw-retained Co-Cr (Colado ®) framework milled in Ivoclar's PM7 machine for the ultimate passivity fused to the Best in class Ivoclar's IPS style ® porcelain for the best aesthetics.)", warranty: "string", price: "29999" },
-    { productName: "luxur premium full arch(Screw-retained Co-Cr casted metal framework fused to  Procelain (Ivoclar IPS Classic) fro All-on-cases.)", warranty: "string", price: "19999" },
-    { productName: "co-cr framework to receive crown and bridge(MILLED IN IVOCLAR'S PM7 MACHINE USING  COLADO Co-Cr blank.)", warranty: "string", price: "24999" },
-    { productName: "dmls titanium framework to receive crown and bridge", warranty: "string", price: "29999" },
-    { productName: "luxr bio-hpp peek", warranty: "string", price: "34999" },
-    { productName: "milled titanium framework(to recieve crown and bridge/COMPOSITE LAYERING)", warranty: "string", price: "49999" },
-    { productName: "classic heat cure denture", warranty: "string", price: "4999" },
-    { productName: "luxur high impact BPS denture (Ivoclar's Ivobase acrylisation and Ivoclar's Ivostar and Gnthostar acrylic teeth.)", warranty: "string", price: "7999" },
-    { productName: "luxur high impact 3D printed digital BPS denture(3D systems denture base resin (Imported from USA) bonded to 3D systems Micro-Fibre Hybrid teeth.UTS CAD and Gnathometer CAD will be provided to trained dentists from the lab side.)", warranty: "string", price: "11999" },
-    { productName: "luxur high impact CAd-CAM millied digital BPS denture (3D systems denture base resin (Imported from USA) bonded to 3D systems Micro- Fibre Hybrid teeth. UTS CAD and Gnathometer CAD will be provided to trained dentists from the lab side.)", warranty: "string", price: "24999" },
-    { productName: "Essex retainer/Soft splint(1mm/2mm vaccum adapted thermo-plastic flexible retainers)", warranty: "string", price: "699" },
-    { productName: "self-cure clear acrylic hard splint(Ivoclar's Ivobase acrylisation and Ivoclar's Ivostar and Gnathostar acrylic teeth)", warranty: "string", price: "499" },
-    { productName: "luxur TMD splint/HYBRID SPLINT(Milled clear acrylic hard splint - highly recommended in  TMD cases and Bruxism)", warranty: "string", price: "1499" },
-    { productName: "classic monolithic upcera", warranty: "5 Years", price: "1199" },
-    { productName: "classic monolithic-upcera", warranty: "10 Years", price: "1399" },
-    { productName: "premium multilayered-SAGEMAX NEXXZR T Multi-Made in USA", warranty: "10 Years", price: "1999" },
-    { productName: "premium multilayered-SAGEMAX NEXXZR T Multi-Made in USA", warranty: "15 Years", price: "2499" },
-    { productName: "luxur multilayered-IPS eMAX ZIRCAD", warranty: "20 Years", price: "3999" },
-    { productName: "luxur multilayered-PS eMAX ZIRCAD Prime", warranty: "Life time", price: "11999" },
-    { productName: "premium multilayered full arch zirconia", warranty: "(More than 2 continuous posterior pontics or 4 continuous pontics are not recommended in the full arch. Warranty cannot be applied in such cases)", price: "29999" },
-    { productName: "classic monolithic upcera", warranty: "(More than 2 continuous posterior pontics or 4 continuous pontics are not recommended in the full arch.Warranty cannot be applied in such cases)", price: "56999" },
-    { productName: "dmls crown and bridge(Ceramic layering using Ivoclar IPS Classic porcelain and bonding using Bredent Cerambond)", warranty: "10 Years", price: "1199" },
-    { productName: "dmls full metal crown", warranty: "string", price: "499" },
-    { productName: "metal ceramic crown(Casted metal coping with ceramic layering)", warranty: "5 Years", price: "599" },
-    { productName: "maryland bridge(Pontic Wing)", warranty: "string", price: "499-1199" },
-    { productName: "cad-cam milled/printed(3D Systems Micro-Fibre Hybrid resin)", warranty: "string", price: "299" },
-    { productName: "putty index for temporisation", warranty: "string", price: "699" },
-    { productName: "lithium di-silicate(IPS eMAX CAD)", warranty: "string", price: "4999(single unit)" },
-    { productName: "cad-cam veneers (IPS eMAX empress CAD (Feldspathic ceramic))", warranty: "string", price: "2499" },
-    { productName: "press veneers(IPS eMAX press(Feldspathic ceramic))", warranty: "string", price: "2499 (bridge upto 3 unit)" },
-    { productName: "ot-unilateral attachment(2 Units Heat-cure CPD with OT-Unilateral attachment kit from Rhein-83)", warranty: "string", price: "6999" },
-    { productName: "Hybrid Denture (Co-Cr framework with Ivoclar's Ivobase heat cure acrylic and Ivoclar's Ivostar and Gnathostar acrylic teeth)", warranty: "string", price: "19999" },
-    { productName: "Co-Cr framework with conventional DPI heat cure acrylisation Upto 3 teeth", warranty: "string", price: "6999" },
-    { productName: "Co-Cr framework with conventional DPI heat cure acrylisation Upto 6 teeth", warranty: "Upto 6 months", price: "9999" },
-    { productName: "Co-Cr framework with conventional DPI heat cure acrylisation Upto 12 teeth", warranty: "Upto 12 months", price: "12999" },
-    { productName: "Additional charges for Ivobase and Ivoclar teeth set", warranty: "String", price: "4999" },
-    { productName: "dmls crown and bridge (Ceramic layering using Ivoclar IPS Classic porcelain)", warranty: "5 Years", price: "899" },
+  // Product data with code, name, warranty, and price
+  const products: Array<{ code: string; name: string; warranty: string | null; price: number }> = [
+    // ZIRCONIA CROWN & BRIDGE (LD 1-8)
+    { code: 'LD 1', name: 'SAGEMAX MONOLITHIC', warranty: '5 Years', price: 1199 },
+    { code: 'LD 2', name: 'SAGEMAX MONOLITHIC', warranty: '10 Years', price: 1399 },
+    { code: 'LD 3', name: 'PREMIUM MULTILAYERED', warranty: '10 Years', price: 1999 },
+    { code: 'LD 4', name: 'PREMIUM MULTILAYERED', warranty: '15 Years', price: 2499 },
+    { code: 'LD 5', name: 'LUXUR MULTILAYERED', warranty: '20 Years', price: 3999 },
+    { code: 'LD 6', name: 'LUXUR MULTILAYERED - PRIME', warranty: 'Life time', price: 11999 },
+    { code: 'LD 7', name: 'PREMIUM MULTILAYERED FULL ARCH ZIRCONIA', warranty: null, price: 29999 },
+    { code: 'LD 8', name: 'LUXUR MULTILAYERED FULL ARCH ZIRCONIA', warranty: null, price: 56999 },
+    
+    // DMLS CROWN & BRIDGE (LD 9-15)
+    { code: 'LD 9', name: 'DMLS CROWN AND BRIDGE', warranty: '5 Years', price: 899 },
+    { code: 'LD 10', name: 'DMLS CROWN AND BRIDGE', warranty: '10 Years', price: 1199 },
+    { code: 'LD 11', name: 'DMLS FULL METAL CROWN', warranty: null, price: 499 },
+    { code: 'LD 13', name: 'MARYLAND BRIDGE', warranty: null, price: 1199 },
+    { code: 'LD 14', name: 'CAD-CAM MILLED/PRINTED', warranty: null, price: 299 },
+    { code: 'LD 15', name: 'PUTTY INDEX FOR TEMPORISATION', warranty: null, price: 699 },
+    
+    // GLASS CERAMIC (LD 16-18)
+    { code: 'LD 16', name: 'E-MAX CAD (CROWN/ONLAY/INLAY) (SINGLE UNIT)', warranty: null, price: 4999 },
+    { code: 'LD 17', name: 'IPS EMPRESS CAD-CAM VENEERS', warranty: null, price: 3999 },
+    { code: 'LD 18', name: 'PRESS VENEERS (BRIDGE UPTO 3 UNITS)', warranty: null, price: 2999 },
+    
+    // PRECISION ATTACHMENT (LD 19-26)
+    { code: 'LD 19', name: 'OT- UNILATERAL ATTACHMENT', warranty: null, price: 6999 },
+    { code: 'LD 20', name: 'KEY-KEYWAY PROSTHESIS', warranty: null, price: 2499 },
+    { code: 'LD 21', name: 'EQUATOR WITH OT CAP', warranty: null, price: 4999 },
+    { code: 'LD 22', name: 'LOCATOR WITH OT CAP', warranty: '5 Years', price: 6999 },
+    { code: 'LD 23', name: 'HAGERS ATTACHMENTS', warranty: null, price: 1499 },
+    { code: 'LD 24', name: 'ZIRCONIA', warranty: null, price: 2999 },
+    { code: 'LD 25', name: 'DMLS CO-CR', warranty: null, price: 1499 },
+    { code: 'LD 26', name: 'TITANIUM DMLS', warranty: null, price: 1999 },
+    
+    // IMPLANT PROSTHETICS (LD 27-31)
+    { code: 'LD 27', name: 'DMLS METAL CERAMIC SCREW-RETAINED CROWN WITH CUSTOM-ABUTMENT', warranty: '5 Years', price: 1999 },
+    { code: 'LD 28', name: 'DMLS METAL CERAMIC SCREW-RETAINED CROWN WITH CUSTOM-ABUTMENT', warranty: '10 Years', price: 2499 },
+    { code: 'LD 29', name: 'ZIRCONIA CROWN WITH DMLS CO-CR SCREW-RETAINED CUSTOM ABUTMENT', warranty: '15 Years', price: 3299 },
+    { code: 'LD 30', name: 'IPS eMAX ZirCAD PRIME ZIRCONIA CROWN WITH DMLS CO-CR SCREW-RETAINED CUSTOM ABUTMENT', warranty: '15 Years', price: 4999 },
+    { code: 'LD 31', name: 'IPS eMAX ZirCAD PRIME ZIRCONIA CROWN WITH MILLED ZIRCONIA SCREW-RETAINED ABUTMENT', warranty: null, price: 6999 },
+    
+    // FULL-ARCH IMPLANT PROSTHETICS (LD 32-34)
+    { code: 'LD 32', name: 'LUXUR FULL ARCH ZIRCONIA ELITE', warranty: null, price: 74999 },
+    { code: 'LD 33', name: 'LUXUR PFM FULL ARCH PRO', warranty: null, price: 29999 },
+    { code: 'LD 34', name: 'LUXUR PREMIUM FULL ARCH', warranty: null, price: 19999 },
+    
+    // FULL-ARCH IMPLANT PROSTHETICS MALO FRAMEWORKS (LD 35-38)
+    { code: 'LD 35', name: 'CO-CR FRAMEWORK TO RECEIVE CROWN AND BRIDGE', warranty: null, price: 24999 },
+    { code: 'LD 36', name: 'DMLS TITANIUM FRAMEWORK TO RECEIVE CROWN AND BRIDGE', warranty: null, price: 29999 },
+    { code: 'LD 37', name: 'LUXUR BIO-HPP PEEK', warranty: null, price: 34999 },
+    { code: 'LD 38', name: 'MILLED TITANIUM FRAMEWORK TO RECEIVE CROWN AND BRIDGE/COMPOSITE LAYERING', warranty: null, price: 49999 },
+    
+    // HYBRID DENTURE & CAST PARTIAL DENTURE (LD 39-43)
+    { code: 'LD 39', name: 'HYBRID DENTURE', warranty: null, price: 19999 },
+    { code: 'LD 40', name: 'CAST PARTIAL DENTURE UPTO 3 TEETH', warranty: null, price: 6999 },
+    { code: 'LD 41', name: 'CAST PARTIAL DENTURE UPTO 6 TEETH', warranty: null, price: 9999 },
+    { code: 'LD 42', name: 'CAST PARTIAL DENTURE UPTO 12 TEETH', warranty: null, price: 12999 },
+    { code: 'LD 43', name: 'ADDITIONAL CHARGES FOR IVOBASE AND IVOCLAR TEETH SET', warranty: null, price: 4999 },
+    
+    // PREMIUM COMPLETE DENTURES (LD 44-47)
+    { code: 'LD 44', name: 'CLASSIC HEAT CURE DENTURE', warranty: null, price: 3999 },
+    { code: 'LD 45', name: 'LUXUR HIGH IMPACT BPS DENTURE', warranty: null, price: 7999 },
+    { code: 'LD 46', name: 'LUXUR HIGH IMPACT 3D PRINTED DIGITAL BPS DENTURE', warranty: null, price: 11999 },
+    { code: 'LD 47', name: 'LUXUR HIGH IMPACT CAD-CAM MILLED DIGITAL BPS DENTURE', warranty: null, price: 19999 },
+    
+    // SPLINTS & RETAINERS (LD 48-50)
+    { code: 'LD 48', name: 'ESSEX RETAINER/SOFT SPLINT', warranty: null, price: 699 },
+    { code: 'LD 49', name: 'SELF-CURE CLEAR ACRYLIC HARD SPLINT', warranty: null, price: 499 },
+    { code: 'LD 50', name: 'LUXUR TMD SPLINT/HYBRID SPLINT', warranty: null, price: 1499 },
   ];
 
   // Seed products
   let createdProducts = 0;
-  let updatedProducts = 0;
 
   for (const productData of products) {
-    const price = parsePrice(productData.price);
-    const warranty = productData.warranty === 'string' ? '' : productData.warranty;
-
-    // Check if product already exists by name
-    const existing = await prisma.product.findFirst({
-      where: { product: productData.productName },
+    await prisma.product.create({
+      data: {
+        code: productData.code,
+        name: productData.name,
+        warranty: productData.warranty ?? undefined,
+        price: productData.price,
+        discount: 0,
+      },
     });
-
-    if (!existing) {
-      await prisma.product.create({
-        data: {
-          product: productData.productName,
-          warranty,
-          price,
-          discount: 0,
-        },
-      });
-      createdProducts++;
-    } else {
-      await prisma.product.update({
-        where: { id: existing.id },
-        data: {
-          warranty,
-          price,
-        },
-      });
-      updatedProducts++;
-    }
+    createdProducts++;
   }
 
-  console.log(`✅ Seeded products: ${createdProducts} created, ${updatedProducts} updated`);
+  console.log(`✅ Seeded ${createdProducts} products successfully`);
 }
 
 main().finally(async () => {
   await prisma.$disconnect();
 });
-
-

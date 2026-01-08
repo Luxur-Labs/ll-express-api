@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
+
 import { OrderService, CreateOrderData, UpdateOrderData } from '../services/order.service';
-import { AuthUser } from '../types/auth';
 
 const orderService = new OrderService();
 
@@ -36,11 +36,11 @@ export async function createOrderController(req: Request, res: Response) {
 
     // Validate each order product
     for (const product of orderProducts) {
-      if (!product.productId || !product.workType || !product.workSpecification || !product.shadeType || !product.finishingInstructions ||
+      if (!product.productId || !product.shadeType || !product.finishingInstructions ||
           product.componentDetails === undefined || product.componentDetails === null || !product.incaseOfAllAbutments || !product.occlusalStaining ||
           !product.ponticDesign || !product.repeatCorrections || !product.enterReason) {
         return res.status(400).json({
-          message: 'Each order product must have all required fields: productId, workType, workSpecification, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason'
+          message: 'Each order product must have all required fields: productId, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason'
         });
       }
     }
@@ -131,6 +131,7 @@ export async function getOrdersListController(req: Request, res: Response) {
     const {
       search,
       invoiceNumber,
+      orderId,
       status,
       patientId,
       doctorId,
@@ -141,6 +142,7 @@ export async function getOrdersListController(req: Request, res: Response) {
       clinicName,
       partner,
       scanningMode,
+      productCode,
       scheduleFrom,
       scheduleTo,
       estimateDateFrom,
@@ -164,6 +166,7 @@ export async function getOrdersListController(req: Request, res: Response) {
       limit,
       search: search as string | undefined,
       invoiceNumber: invoiceNumber as string | undefined,
+      orderId: orderId as string | undefined,
       status: status as string | undefined,
       patientId: patientId as string | undefined,
       doctorId: doctorId as string | undefined,
@@ -174,6 +177,7 @@ export async function getOrdersListController(req: Request, res: Response) {
       clinicName: clinicName as string | undefined,
       partner: partner as string | undefined,
       scanningMode: scanningMode as string | undefined,
+      productCode: productCode as string | undefined,
       scheduleFrom: scheduleFrom as string | undefined,
       scheduleTo: scheduleTo as string | undefined,
       estimateDateFrom: estimateDateFrom as string | undefined,
@@ -208,6 +212,7 @@ export async function updateOrderController(req: Request, res: Response) {
     const {
       invoiceNumber,
       patientId,
+      patient, // Support updating patient info directly
       doctorId,
       clinicId,
       referredDoctorId,
@@ -217,7 +222,9 @@ export async function updateOrderController(req: Request, res: Response) {
       enterRemark,
       estimateDate,
       dateOfApproach,
-      status
+      status,
+      orderProducts, // Support updating order products
+      files, // Support updating files
     } = req.body;
 
     if (!id) {
@@ -230,19 +237,72 @@ export async function updateOrderController(req: Request, res: Response) {
       return res.status(404).json({ message: 'Order not found' });
     }
 
+    // Validate patient data if provided
+    if (patient !== undefined) {
+      if (!patient.name || patient.age === undefined || !patient.gender) {
+        return res.status(400).json({
+          message: 'Patient data must include: name, age, and gender'
+        });
+      }
+    }
+
+    // Validate order products if provided
+    if (orderProducts !== undefined) {
+      if (!Array.isArray(orderProducts)) {
+        return res.status(400).json({
+          message: 'orderProducts must be an array'
+        });
+      }
+      for (const product of orderProducts) {
+        if (!product.productId || !product.shadeType || !product.finishingInstructions ||
+            product.componentDetails === undefined || product.componentDetails === null || !product.incaseOfAllAbutments || !product.occlusalStaining ||
+            !product.ponticDesign || !product.repeatCorrections || !product.enterReason) {
+          return res.status(400).json({
+            message: 'Each order product must have all required fields: productId, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason'
+          });
+        }
+      }
+    }
+
+    // Validate files if provided
+    if (files !== undefined) {
+      if (!Array.isArray(files)) {
+        return res.status(400).json({
+          message: 'files must be an array'
+        });
+      }
+      for (const file of files) {
+        if (!file.fileName || !file.s3Key) {
+          return res.status(400).json({
+            message: 'Each file must have fileName and s3Key'
+          });
+        }
+      }
+    }
+
     const updateData: UpdateOrderData = {};
     if (invoiceNumber !== undefined) updateData.invoiceNumber = invoiceNumber;
     if (patientId !== undefined) updateData.patientId = patientId;
+    if (patient !== undefined) {
+      updateData.patient = {
+        name: patient.name,
+        age: typeof patient.age === 'string' ? parseInt(patient.age, 10) : patient.age,
+        gender: patient.gender,
+        contactNumber: patient.contactNumber,
+      };
+    }
     if (doctorId !== undefined) updateData.doctorId = doctorId;
     if (clinicId !== undefined) updateData.clinicId = clinicId;
     if (referredDoctorId !== undefined) updateData.referredDoctorId = referredDoctorId;
     if (partner !== undefined) updateData.partner = partner;
     if (scanningMode !== undefined) updateData.scanningMode = scanningMode;
-    if (schedule !== undefined) updateData.schedule = new Date(schedule);
+    if (schedule !== undefined && schedule !== null && schedule !== '') updateData.schedule = new Date(schedule);
     if (enterRemark !== undefined) updateData.enterRemark = enterRemark;
     if (estimateDate !== undefined) updateData.estimateDate = new Date(estimateDate);
-    if (dateOfApproach !== undefined) updateData.dateOfApproach = new Date(dateOfApproach);
+    if (dateOfApproach !== undefined && dateOfApproach !== null && dateOfApproach !== '') updateData.dateOfApproach = new Date(dateOfApproach);
     if (status !== undefined) updateData.status = status;
+    if (orderProducts !== undefined) updateData.orderProducts = orderProducts;
+    if (files !== undefined) updateData.files = files;
 
     const updatedOrder = await orderService.updateOrder(id, updateData, (req as any).user?.id);
     return res.json(updatedOrder);

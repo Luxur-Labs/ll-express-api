@@ -2,8 +2,9 @@ import { z } from 'zod';
 
 export const createProductSchema = z.object({
   body: z.object({
-    product: z.string().min(1, 'Product name is required').max(255, 'Product name too long'),
-    warranty: z.string().min(1, 'Warranty is required').max(255, 'Warranty description too long'),
+    name: z.string().min(1, 'Product name is required').max(255, 'Product name too long'),
+    code: z.string().max(255, 'Product code too long').optional(),
+    warranty: z.string().max(255, 'Warranty description too long').optional(),
     price: z.number().min(0, 'Price must be a positive number').max(999999.99, 'Price too high'),
     discount: z.number().min(0, 'Discount cannot be negative').max(100, 'Discount cannot exceed 100%').optional(),
   }),
@@ -13,8 +14,9 @@ export const createProductSchema = z.object({
 
 export const updateProductSchema = z.object({
   body: z.object({
-    product: z.string().min(1, 'Product name is required').max(255, 'Product name too long').optional(),
-    warranty: z.string().min(1, 'Warranty is required').max(255, 'Warranty description too long').optional(),
+    name: z.string().min(1, 'Product name is required').max(255, 'Product name too long').optional(),
+    code: z.string().max(255, 'Product code too long').optional(),
+    warranty: z.string().max(255, 'Warranty description too long').optional(),
     price: z.number().min(0, 'Price must be a positive number').max(999999.99, 'Price too high').optional(),
     discount: z.number().min(0, 'Discount cannot be negative').max(100, 'Discount cannot exceed 100%').optional(),
   }),

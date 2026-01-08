@@ -78,8 +78,9 @@ model Clinic {
 
 model Product {
   id          String   @id @default(uuid())
-  product     String
-  warranty    String
+  name        String
+  code        String?
+  warranty    String?
   price       Decimal  @db.Decimal(10, 2)
   discount    Decimal  @db.Decimal(5, 2) @default(0)
   
@@ -152,8 +153,8 @@ model OrderProduct {
   productId             String
   
   // Order product specific fields
-  workType              String
-  workSpecification     String
+  workType              String?
+  workSpecification     String?
   shadeType             String
   finishingInstructions String
   componentDetails      String
