@@ -6,11 +6,14 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  const [qc, technician, dispatcher, cadTechnician, camTechnician] = await Promise.all([
+  const [qc, cadTechnician] = await Promise.all([
     prisma.employeeType.upsert({ where: { name: 'QC' }, update: {}, create: { name: 'QC' } }),
+    prisma.technicianGroup.upsert({ where: { name: 'CAD_TECHNICIAN' }, update: {}, create: { name: 'CAD_TECHNICIAN' } }),
+  ]);
+
+  await Promise.all([
     prisma.employeeType.upsert({ where: { name: 'TECHNICIAN' }, update: {}, create: { name: 'TECHNICIAN' } }),
     prisma.employeeType.upsert({ where: { name: 'DISPATCHER' }, update: {}, create: { name: 'DISPATCHER' } }),
-    prisma.technicianGroup.upsert({ where: { name: 'CAD_TECHNICIAN' }, update: {}, create: { name: 'CAD_TECHNICIAN' } }),
     prisma.technicianGroup.upsert({ where: { name: 'CAM_TECHNICIAN' }, update: {}, create: { name: 'CAM_TECHNICIAN' } }),
   ]);
 
@@ -113,7 +116,8 @@ async function main() {
       data: {
         code: productData.code,
         name: productData.name,
-        warranty: productData.warranty ?? undefined,
+        // Prisma type expects a string; fallback to empty string if null/undefined
+        warranty: productData.warranty ?? '',
         price: productData.price,
         discount: 0,
       },
