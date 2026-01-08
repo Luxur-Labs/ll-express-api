@@ -1,5 +1,5 @@
-import { prisma } from '../utils/prisma';
 import { createOrderTransition } from '../utils/orderTransitions';
+import { prisma } from '../utils/prisma';
 
 export interface CreateOrderTechnicianGroupData {
   orderId: string;
@@ -180,12 +180,8 @@ export class OrderTechnicianGroupService {
               invoiceNumber: true,
               status: true,
               createdAt: true,
+              doctorName: true,
               patient: {
-                select: {
-                  name: true,
-                },
-              },
-              doctor: {
                 select: {
                   name: true,
                 },
@@ -193,9 +189,10 @@ export class OrderTechnicianGroupService {
               clinic: {
                 select: {
                   clinicName: true,
-                },
+                  doctorName: true,
+                } as any,
               },
-            },
+            } as any,
           },
         },
         orderBy: {
@@ -214,14 +211,14 @@ export class OrderTechnicianGroupService {
 
     return {
       data: {
-        assignments: assignments.map(assignment => ({
+        assignments: assignments.map((assignment: any) => ({
           id: assignment.id,
           orderId: assignment.order.id,
           invoiceNumber: assignment.order.invoiceNumber,
           status: assignment.order.status,
-          patientName: assignment.order.patient.name,
-          doctorName: assignment.order.doctor.name,
-          clinicName: assignment.order.clinic.clinicName,
+          patientName: assignment.order.patient?.name || null,
+          doctorName: assignment.order.clinic?.doctorName || null,
+          clinicName: assignment.order.clinic?.clinicName || null,
           assignedAt: assignment.assignedAt.getTime(),
           notes: assignment.notes,
         })),

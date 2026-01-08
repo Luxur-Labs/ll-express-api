@@ -12,6 +12,7 @@ export async function createOrderController(req: Request, res: Response) {
       doctorId,
       clinicId,
       referredDoctorId,
+      referenceName,
       partner,
       estimateDate,
       orderProducts,
@@ -19,11 +20,11 @@ export async function createOrderController(req: Request, res: Response) {
       status
     } = req.body;
 
-    if (!invoiceNumber || !patient || !doctorId || !clinicId || !partner || 
+    if (!invoiceNumber || !patient || !clinicId || !partner || 
         !estimateDate || 
         !orderProducts || !Array.isArray(orderProducts) || orderProducts.length === 0) {
       return res.status(400).json({
-        message: 'All required fields must be provided: invoiceNumber, patient (with name, age, gender), doctorId, clinicId, partner, estimateDate, and orderProducts (non-empty array)'
+        message: 'All required fields must be provided: invoiceNumber, patient (with name, age, gender), clinicId, partner, estimateDate, and orderProducts (non-empty array)'
       });
     }
 
@@ -67,6 +68,7 @@ export async function createOrderController(req: Request, res: Response) {
       doctorId,
       clinicId,
       referredDoctorId,
+      referenceName,
       partner,
       estimateDate: new Date(estimateDate),
       orderProducts,
@@ -173,7 +175,7 @@ export async function getOrdersListController(req: Request, res: Response) {
       clinicId: clinicId as string | undefined,
       referredDoctorId: referredDoctorId as string | undefined,
       patientName: patientName as string | undefined,
-      doctorName: doctorName as string | undefined,
+      doctorName: doctorName ? (doctorName as string).trim() : undefined,
       clinicName: clinicName as string | undefined,
       partner: partner as string | undefined,
       scanningMode: scanningMode as string | undefined,
@@ -216,6 +218,7 @@ export async function updateOrderController(req: Request, res: Response) {
       doctorId,
       clinicId,
       referredDoctorId,
+      referenceName,
       partner,
       scanningMode,
       schedule,
@@ -294,6 +297,7 @@ export async function updateOrderController(req: Request, res: Response) {
     if (doctorId !== undefined) updateData.doctorId = doctorId;
     if (clinicId !== undefined) updateData.clinicId = clinicId;
     if (referredDoctorId !== undefined) updateData.referredDoctorId = referredDoctorId;
+    if (referenceName !== undefined) updateData.referenceName = referenceName;
     if (partner !== undefined) updateData.partner = partner;
     if (scanningMode !== undefined) updateData.scanningMode = scanningMode;
     if (schedule !== undefined && schedule !== null && schedule !== '') updateData.schedule = new Date(schedule);

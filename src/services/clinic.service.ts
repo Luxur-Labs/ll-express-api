@@ -5,6 +5,7 @@ export interface CreateClinicData {
   organizationId: string;
   clientAddress: string;
   contactNumber: string;
+  doctorName?: string;
 }
 
 export interface UpdateClinicData {
@@ -12,6 +13,7 @@ export interface UpdateClinicData {
   organizationId?: string;
   clientAddress?: string;
   contactNumber?: string;
+  doctorName?: string;
 }
 
 export class ClinicService {
@@ -55,13 +57,15 @@ export class ClinicService {
 
   async getClinicsList() {
     return await prisma.clinic.findMany({
+      // doctorName is newly added; cast select to any until Prisma client is regenerated
       select: {
         id: true,
         clinicName: true,
         clientAddress: true,
         contactNumber: true,
         organizationId: true,
-      },
+        doctorName: true,
+      } as any,
       orderBy: { clinicName: 'asc' },
     });
   }

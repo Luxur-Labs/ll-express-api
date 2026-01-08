@@ -79,9 +79,10 @@ export const createOrderSchema = z.object({
   body: z.object({
     invoiceNumber: stringSchema('Invoice number is required', 255),
     patient: patientDataSchema, // Changed from patientId to patient object
-    doctorId: stringSchema('Doctor ID is required'),
+    doctorId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
     clinicId: stringSchema('Clinic ID is required'),
     referredDoctorId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
+    referenceName: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Reference name too long').optional()),
     partner: stringSchema('Partner is required', 255),
     estimateDate: z.preprocess((val) => val === null ? undefined : val, z.string().datetime('Invalid estimate date format')),
     orderProducts: z.array(orderProductSchema).min(1, 'At least one order product is required'),
@@ -100,6 +101,7 @@ export const updateOrderSchema = z.object({
     doctorId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
     clinicId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
     referredDoctorId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
+    referenceName: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Reference name too long').optional()),
     partner: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Partner name too long').optional()),
     scanningMode: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Scanning mode too long').optional()),
     schedule: z.preprocess((val) => val === null || val === '' ? undefined : val, z.string().optional()),

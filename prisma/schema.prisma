@@ -68,6 +68,7 @@ model Clinic {
   organizationId  String
   clientAddress   String
   contactNumber   String
+  doctorName      String?
   
   // Relations
   orders          Order[]
@@ -108,13 +109,15 @@ model Patient {
 model Order {
   id              String   @id @default(uuid())
   invoiceNumber   String   @unique
+  doctorName      String?
+  referenceName   String?
   
   // Relations
   patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
   patientId       String
   
-  doctor          User     @relation("OrderDoctor", fields: [doctorId], references: [id], onDelete: Cascade)
-  doctorId        String
+  doctor          User?    @relation("OrderDoctor", fields: [doctorId], references: [id], onDelete: SetNull)
+  doctorId        String?
   
   clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   clinicId        String

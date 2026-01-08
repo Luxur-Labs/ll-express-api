@@ -45,9 +45,10 @@ export interface CreatePatientData {
 export interface CreateOrderData {
   invoiceNumber: string;
   patient: CreatePatientData; // Changed from patientId to patient object
-  doctorId: string;
+  doctorId?: string;
   clinicId: string;
   referredDoctorId?: string;
+  referenceName?: string;
   partner: string;
   estimateDate: Date;
   orderProducts: CreateOrderProductData[];
@@ -62,6 +63,7 @@ export interface UpdateOrderData {
   doctorId?: string;
   clinicId?: string;
   referredDoctorId?: string;
+  referenceName?: string;
   partner?: string;
   scanningMode?: string;
   schedule?: Date;
@@ -93,6 +95,15 @@ export class OrderService {
     
     // Generate formatted order ID (e.g., ODLUXDDMMYY01)
     const orderId = await this.generateOrderId();
+
+    // Lookup doctor name for denormalized storage (if doctorId provided)
+    let doctor = null;
+    if (data.doctorId) {
+      doctor = await prisma.user.findUnique({
+        where: { id: data.doctorId },
+        select: { name: true },
+      });
+    }
     
     // Create or find patient
     // First, try to find existing patient by name, age, and gender
@@ -121,7 +132,9 @@ export class OrderService {
         id: orderId,
         invoiceNumber: data.invoiceNumber,
         patientId: patient.id,
-        doctorId: data.doctorId,
+        doctorId: data.doctorId || null,
+        doctorName: doctor?.name || null,
+        referenceName: data.referenceName,
         clinicId: data.clinicId,
         referredDoctorId: data.referredDoctorId,
         partner: data.partner,
@@ -167,7 +180,7 @@ export class OrderService {
             uploadedBy: file.uploadedBy,
           }))
         } : undefined,
-      },
+      } as any,
       include: {
         patient: true,
         doctor: true,
@@ -175,12 +188,13 @@ export class OrderService {
           select: {
             id: true,
             clinicName: true,
+            doctorName: true,
             organizationId: true,
             clientAddress: true,
             contactNumber: true,
             createdAt: true,
             updatedAt: true,
-          },
+          } as any,
         },
         referredDoctor: true,
         orderProducts: {
@@ -201,7 +215,7 @@ export class OrderService {
         },
         files: true,
       },
-    });
+    } as any) as any;
 
     // Create initial transition for order creation
     await createOrderTransition({
@@ -215,7 +229,7 @@ export class OrderService {
     // Convert Decimal fields to strings for JSON serialization
     return {
       ...order,
-      orderProducts: order.orderProducts.map(op => ({
+      orderProducts: order.orderProducts.map((op: any) => ({
         ...op,
         product: op.product ? {
           ...op.product,
@@ -236,12 +250,13 @@ export class OrderService {
           select: {
             id: true,
             clinicName: true,
+            doctorName: true,
             organizationId: true,
             clientAddress: true,
             contactNumber: true,
             createdAt: true,
             updatedAt: true,
-          },
+          } as any,
         },
         referredDoctor: true,
         orderProducts: {
@@ -266,8 +281,10 @@ export class OrderService {
 
     // Convert Decimal fields to strings for JSON serialization
     if (order) {
+      const orderData = { ...order } as any;
+      delete orderData.doctorName;
       return {
-        ...order,
+        ...orderData,
         orderProducts: order.orderProducts.map(op => ({
           ...op,
           product: op.product ? {
@@ -292,12 +309,13 @@ export class OrderService {
           select: {
             id: true,
             clinicName: true,
+            doctorName: true,
             organizationId: true,
             clientAddress: true,
             contactNumber: true,
             createdAt: true,
             updatedAt: true,
-          },
+          } as any,
         },
         referredDoctor: true,
         orderProducts: {
@@ -322,8 +340,10 @@ export class OrderService {
 
     // Convert Decimal fields to strings for JSON serialization
     if (order) {
+      const orderData = { ...order } as any;
+      delete orderData.doctorName;
       return {
-        ...order,
+        ...orderData,
         orderProducts: order.orderProducts.map(op => ({
           ...op,
           product: op.product ? {
@@ -414,20 +434,25 @@ export class OrderService {
         },
       };
     }
-    if (filters.doctorName) {
-      whereClause.doctor = {
-        name: {
-          contains: filters.doctorName,
-          mode: 'insensitive',
-        },
-      };
-    }
-    if (filters.clinicName) {
+    // Clinic filters (merge doctorName and clinicName if both are provided)
+    const trimmedDoctorName = filters.doctorName?.trim();
+    const trimmedClinicName = filters.clinicName?.trim();
+    
+    if (trimmedDoctorName || trimmedClinicName) {
       whereClause.clinic = {
-        clinicName: {
-          contains: filters.clinicName,
-          mode: 'insensitive',
-        },
+        ...whereClause.clinic,
+        ...(trimmedDoctorName && {
+          doctorName: {
+            contains: trimmedDoctorName,
+            mode: 'insensitive',
+          },
+        }),
+        ...(trimmedClinicName && {
+          clinicName: {
+            contains: trimmedClinicName,
+            mode: 'insensitive',
+          },
+        }),
       };
     }
     
@@ -484,14 +509,20 @@ export class OrderService {
       if (filters.createdAtTo) whereClause.createdAt.lte = new Date(filters.createdAtTo);
     }
     
-    // Search filter (searches across invoiceNumber, patient name, doctor name, clinic name)
+    // Search filter (searches across invoiceNumber, patient name, clinic doctor name, clinic name)
     if (filters.search) {
       const searchTerm = filters.search.trim();
       whereClause.OR = [
         { invoiceNumber: { contains: searchTerm, mode: 'insensitive' } },
         { patient: { name: { contains: searchTerm, mode: 'insensitive' } } },
-        { doctor: { name: { contains: searchTerm, mode: 'insensitive' } } },
-        { clinic: { clinicName: { contains: searchTerm, mode: 'insensitive' } } },
+        { 
+          clinic: { 
+            OR: [
+              { doctorName: { contains: searchTerm, mode: 'insensitive' } },
+              { clinicName: { contains: searchTerm, mode: 'insensitive' } },
+            ],
+          },
+        },
       ];
     }
     
@@ -514,7 +545,7 @@ export class OrderService {
             select: { name: true },
           },
           clinic: {
-            select: { clinicName: true },
+            select: { clinicName: true, doctorName: true } as any,
           },
           orderProducts: {
             include: {
@@ -529,13 +560,13 @@ export class OrderService {
           },
         },
         orderBy,
-      }),
+      }) as any,
       prisma.order.count({ where: whereClause }),
-    ]);
+    ]) as any;
 
     return {
       data: {
-        orders: orders.map(order => ({
+        orders: (orders as any[]).map((order: any) => ({
           id: order.id,
           invoiceNumber: order.invoiceNumber,
           status: order.status,
@@ -547,8 +578,9 @@ export class OrderService {
           assignedGroup: null,
           orderProducts: order.orderProducts.map((op: any) => op.product.code || '').filter((code: string) => code).join(', '),
           patientName: order.patient.name,
-          doctorName: order.doctor.name,
+          doctorName: (order.clinic as any).doctorName || null,
           clinicName: order.clinic.clinicName,
+          referenceName: (order as any).referenceName || null,
         })),
         pagination: {
           page,
@@ -568,12 +600,13 @@ export class OrderService {
           select: {
             id: true,
             clinicName: true,
+            doctorName: true,
             organizationId: true,
             clientAddress: true,
             contactNumber: true,
             createdAt: true,
             updatedAt: true,
-          },
+          } as any,
         },
         referredDoctor: true,
         orderProducts: {
@@ -656,7 +689,19 @@ export class OrderService {
     const updateData: any = {};
     if (data.invoiceNumber !== undefined) updateData.invoiceNumber = data.invoiceNumber;
     if (patientId !== undefined) updateData.patientId = patientId;
-    if (data.doctorId !== undefined) updateData.doctorId = data.doctorId;
+    if (data.doctorId !== undefined) {
+      updateData.doctorId = data.doctorId || null;
+      if (data.doctorId) {
+        const doctor = await prisma.user.findUnique({
+          where: { id: data.doctorId },
+          select: { name: true },
+        });
+        updateData.doctorName = doctor?.name || null;
+      } else {
+        updateData.doctorName = null;
+      }
+    }
+    if (data.referenceName !== undefined) updateData.referenceName = data.referenceName;
     if (data.clinicId !== undefined) updateData.clinicId = data.clinicId;
     if (data.referredDoctorId !== undefined) updateData.referredDoctorId = data.referredDoctorId;
     if (data.partner !== undefined) updateData.partner = data.partner;
@@ -822,12 +867,13 @@ export class OrderService {
           select: {
             id: true,
             clinicName: true,
+            doctorName: true,
             organizationId: true,
             clientAddress: true,
             contactNumber: true,
             createdAt: true,
             updatedAt: true,
-          },
+          } as any,
         },
         referredDoctor: true,
         orderProducts: {
