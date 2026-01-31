@@ -42,6 +42,19 @@ export interface CreatePatientData {
   contactNumber?: string;
 }
 
+export type OrderStatusType =
+  | 'NEW'
+  | 'MODEL'
+  | 'CAD'
+  | 'CAM'
+  | 'DMLS'
+  | 'METAL'
+  | 'CERAMIC'
+  | 'ACRYLIC'
+  | 'ADMIN_REVIEW'
+  | 'DISPATCHED'
+  | 'CANCELLED';
+
 export interface CreateOrderData {
   invoiceNumber: string;
   patient: CreatePatientData; // Changed from patientId to patient object
@@ -53,7 +66,7 @@ export interface CreateOrderData {
   estimateDate: Date;
   orderProducts: CreateOrderProductData[];
   files?: CreateFileData[];
-  status?: 'NEW' | 'IN_PROGRESS' | 'UNCLAIMED' | 'DELAYED' | 'COMPLETED' | 'READY_FOR_DISPATCH' | 'DISPATCH_INITIATED' | 'DISPATCH_PARTNER_BOOKED' | 'ORDER_SHIPPED' | 'ORDER_DELIVERED';
+  status?: OrderStatusType;
 }
 
 export interface UpdateOrderData {
@@ -70,7 +83,7 @@ export interface UpdateOrderData {
   enterRemark?: string;
   estimateDate?: Date;
   dateOfApproach?: Date;
-  status?: 'NEW' | 'IN_PROGRESS' | 'UNCLAIMED' | 'DELAYED' | 'COMPLETED' | 'READY_FOR_DISPATCH' | 'DISPATCH_INITIATED' | 'DISPATCH_PARTNER_BOOKED' | 'ORDER_SHIPPED' | 'ORDER_DELIVERED';
+  status?: OrderStatusType;
   orderProducts?: UpdateOrderProductData[]; // Support updating order products with IDs
   files?: UpdateFileData[]; // Support updating files with IDs
 }
