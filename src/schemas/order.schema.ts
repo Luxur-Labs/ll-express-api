@@ -1,17 +1,19 @@
 import { z } from 'zod';
 
-// All available order statuses
+// All available order statuses (department stages + lifecycle)
+// Departments: MODEL, CAD, CAM, DMLS
 const ORDER_STATUSES = [
   'NEW',
-  'IN_PROGRESS',
-  'UNCLAIMED',
-  'DELAYED',
-  'COMPLETED',
-  'READY_FOR_DISPATCH',
-  'DISPATCH_INITIATED',
-  'DISPATCH_PARTNER_BOOKED',
-  'ORDER_SHIPPED',
-  'ORDER_DELIVERED'
+  'MODEL',       // department
+  'CAD',         // department
+  'CAM',         // department
+  'DMLS',        // department
+  'METAL',
+  'CERAMIC',
+  'ACRYLIC',
+  'ADMIN_REVIEW',
+  'DISPATCHED',
+  'CANCELLED',
 ] as const;
 
 // Helper to convert null to undefined for better error messages

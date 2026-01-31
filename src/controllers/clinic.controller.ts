@@ -130,7 +130,11 @@ export async function getClinicsByOrganizationController(req: Request, res: Resp
 
 export async function getClinicsListController(req: Request, res: Response) {
   try {
-    const clinics = await clinicService.getClinicsList();
+    const page = Number(req.query.page) || 0;
+    const limit = Number(req.query.limit) || 50;
+    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+
+    const clinics = await clinicService.getClinicsList(page, limit, search);
     return res.json(clinics);
   } catch (error) {
     console.error('Error fetching clinics list:', error);

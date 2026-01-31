@@ -24,13 +24,14 @@ export class ClinicService {
   }
 
   async getClinicById(id: string) {
-    return await prisma.clinic.findUnique({
-      where: { id },
+    return await prisma.clinic.findFirst({
+      where: { id, isActive: true },
     });
   }
 
   async getAllClinics() {
     return await prisma.clinic.findMany({
+      where: { isActive: true },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -42,22 +43,44 @@ export class ClinicService {
     });
   }
 
-  async deleteClinic(id: string) {
-    return await prisma.clinic.delete({
-      where: { id },
-    });
-  }
-
   async getClinicsByOrganization(organizationId: string) {
     return await prisma.clinic.findMany({
-      where: { organizationId },
+      where: { organizationId, isActive: true },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async getClinicsList() {
-    return await prisma.clinic.findMany({
-      // doctorName is newly added; cast select to any until Prisma client is regenerated
+  async getClinicsList(page: number = 0, limit: number = 50, search?: string) {
+    const safeLimit = Math.max(1, limit);
+    const safePage = Math.max(0, page);
+    const where: any = { isActive: true };
+
+    if (search && search.trim()) {
+      const term = search.trim();
+      where.OR = [
+        { clinicName: { contains: term, mode: 'insensitive' } },
+        { organizationId: { contains: term, mode: 'insensitive' } },
+        { contactNumber: { contains: term, mode: 'insensitive' } },
+        { doctorName: { contains: term, mode: 'insensitive' } },
+      ];
+    }
+
+    const total = await prisma.clinic.count({ where });
+    const skip = safePage * safeLimit;
+
+    if (skip >= total) {
+      return {
+        data: [],
+        pagination: {
+          page: safePage,
+          limit: safeLimit,
+          total,
+        },
+      };
+    }
+
+    const clinics = await prisma.clinic.findMany({
+      where,
       select: {
         id: true,
         clinicName: true,
@@ -66,7 +89,28 @@ export class ClinicService {
         organizationId: true,
         doctorName: true,
       } as any,
-      orderBy: { clinicName: 'asc' },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: safeLimit,
+    });
+
+    return {
+      data: clinics,
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+      },
+    };
+  }
+
+  /**
+   * Soft delete a clinic (set isActive to false)
+   */
+  async deleteClinic(id: string) {
+    return await prisma.clinic.update({
+      where: { id },
+      data: { isActive: false },
     });
   }
 }

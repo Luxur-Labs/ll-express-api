@@ -68,6 +68,7 @@ model Clinic {
   organizationId  String
   clientAddress   String
   contactNumber   String
+  isActive        Boolean  @default(true)
   doctorName      String?
   
   // Relations
