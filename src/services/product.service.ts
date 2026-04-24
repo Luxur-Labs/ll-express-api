@@ -75,8 +75,35 @@ export class ProductService {
     });
   }
 
-  async getProductsList() {
-    return await prisma.product.findMany({
+  async getProductsList(page: number = 0, limit: number = 50, search?: string) {
+    const safeLimit = Math.max(1, limit);
+    const safePage = Math.max(0, page);
+    const where: any = {};
+
+    if (search && search.trim()) {
+      const term = search.trim();
+      where.OR = [
+        { name: { contains: term, mode: 'insensitive' } },
+        { code: { contains: term, mode: 'insensitive' } },
+      ];
+    }
+
+    const total = await prisma.product.count({ where });
+    const skip = safePage * safeLimit;
+
+    if (skip >= total) {
+      return {
+        data: [],
+        pagination: {
+          page: safePage,
+          limit: safeLimit,
+          total,
+        },
+      };
+    }
+
+    const data = await prisma.product.findMany({
+      where,
       select: {
         id: true,
         name: true,
@@ -86,6 +113,17 @@ export class ProductService {
         discount: true,
       },
       orderBy: { name: 'asc' },
+      skip,
+      take: safeLimit,
     });
+
+    return {
+      data,
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+      },
+    };
   }
 }

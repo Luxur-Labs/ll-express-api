@@ -44,6 +44,20 @@ const orderProductSchema = z.object({
   repeatCorrections: stringSchema('Repeat corrections is required', 500),
   enterReason: stringSchema('Enter reason is required', 500),
   unitNumbers: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Unit numbers too long').optional()),
+  // Line-level pricing (optional): when omitted, backend defaults from Product table.
+  unitPrice: z.preprocess(
+    (val) => (val === null || val === '' ? undefined : Number(val)),
+    z.number().finite('Unit price must be a valid number').nonnegative('Unit price cannot be negative').optional()
+  ),
+  discountPercent: z.preprocess(
+    (val) => (val === null || val === '' ? undefined : Number(val)),
+    z
+      .number()
+      .finite('Discount percent must be a valid number')
+      .min(0, 'Discount percent cannot be negative')
+      .max(100, 'Discount percent cannot exceed 100')
+      .optional()
+  ),
 });
 
 // Schema for update - allows ID to reference existing orderProduct

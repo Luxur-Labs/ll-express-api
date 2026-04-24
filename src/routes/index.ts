@@ -9,6 +9,7 @@ import clinicRoutes from './clinic.routes';
 import productRoutes from './product.routes';
 import patientRoutes from './patient.routes';
 import orderRoutes from './order.routes';
+import billingRoutes from './billing.routes';
 import userRoutes from './user.routes';
 import adminRoutes from './admin.routes';
 import authRoutes from './auth.routes';
@@ -43,5 +44,6 @@ router.use('/clinics', clinicRoutes);
 router.use('/products', productRoutes);
 router.use('/patients', patientRoutes);
 router.use('/orders', orderRoutes);
+router.use('/billing', billingRoutes);
  
 export default router;

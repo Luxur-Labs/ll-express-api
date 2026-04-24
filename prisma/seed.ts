@@ -20,16 +20,30 @@ async function main() {
   const adminEmail = 'admin@example.com';
   const passwordHash = await bcrypt.hash('admin123', 10);
 
+  const superAdminUser = {
+    passwordHash,
+    role: 'SUPER_ADMIN' as const,
+    employeeTypeId: qc.id,
+    technicianGroupId: cadTechnician.id,
+  };
+
   await prisma.user.upsert({
     where: { email: adminEmail },
     update: {},
     create: {
       email: adminEmail,
-      passwordHash,
-      role: 'SUPER_ADMIN',
-      employeeTypeId: qc.id,
-      technicianGroupId: cadTechnician.id,
-    }
+      ...superAdminUser,
+    },
+  });
+
+  // Alias used by Angular fake-backend docs / local dev curl
+  await prisma.user.upsert({
+    where: { email: 'admin@luxur.com' },
+    update: { passwordHash: superAdminUser.passwordHash },
+    create: {
+      email: 'admin@luxur.com',
+      ...superAdminUser,
+    },
   });
 
   // Delete all existing products

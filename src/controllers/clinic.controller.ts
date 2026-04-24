@@ -1,11 +1,16 @@
 import { Request, Response } from 'express';
-import { ClinicService, CreateClinicData, UpdateClinicData } from '../services/clinic.service';
+import {
+  ClinicService,
+  CreateClinicData,
+  PendingBalanceLockedError,
+  UpdateClinicData,
+} from '../services/clinic.service';
 
 const clinicService = new ClinicService();
 
 export async function createClinicController(req: Request, res: Response) {
   try {
-    const { clinicName, organizationId, clientAddress, contactNumber, doctorName } = req.body;
+    const { clinicName, organizationId, clientAddress, contactNumber, doctorName, pendingBalance } = req.body;
 
     if (!clinicName || !organizationId || !clientAddress || !contactNumber) {
       return res.status(400).json({
@@ -19,6 +24,10 @@ export async function createClinicController(req: Request, res: Response) {
       clientAddress,
       contactNumber,
       doctorName,
+      pendingBalance:
+        pendingBalance !== undefined && pendingBalance !== null
+          ? Number(pendingBalance) || 0
+          : undefined,
     };
 
     const clinic = await clinicService.createClinic(clinicData);
@@ -63,7 +72,7 @@ export async function getAllClinicsController(req: Request, res: Response) {
 export async function updateClinicController(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const { clinicName, organizationId, clientAddress, contactNumber, doctorName } = req.body;
+    const { clinicName, organizationId, clientAddress, contactNumber, doctorName, pendingBalance } = req.body;
 
     if (!id) {
       return res.status(400).json({ message: 'Clinic ID is required' });
@@ -81,10 +90,16 @@ export async function updateClinicController(req: Request, res: Response) {
     if (clientAddress !== undefined) updateData.clientAddress = clientAddress;
     if (contactNumber !== undefined) updateData.contactNumber = contactNumber;
     if (doctorName !== undefined) updateData.doctorName = doctorName;
+    if (pendingBalance !== undefined && pendingBalance !== null) {
+      updateData.pendingBalance = Number(pendingBalance) || 0;
+    }
 
     const updatedClinic = await clinicService.updateClinic(id, updateData);
     return res.json(updatedClinic);
   } catch (error) {
+    if (error instanceof PendingBalanceLockedError) {
+      return res.status(409).json({ message: error.message });
+    }
     console.error('Error updating clinic:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }

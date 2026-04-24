@@ -30,6 +30,9 @@ const envSchema = z.object({
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
   S3_BUCKET_NAME: z.string().optional(),
   S3_PUBLIC_URL: z.string().url().optional(),
+  // Razorpay configuration (billing payments)
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
 }); 
  
 const parsed = envSchema.safeParse(process.env); 

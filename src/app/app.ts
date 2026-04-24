@@ -5,9 +5,9 @@ import path from 'path';
  
 import { errorHandler } from '../middleware/error.middleware'; 
 import { notFound } from '../middleware/notFound.middleware'; 
-import { requestLogger } from '../middleware/requestLogger.middleware'; 
+import { requestLogger } from '../middleware/requestLogger.middleware';
 import { globalRateLimiter } from '../middleware/rateLimiter.middleware';
-import router from '../routes'; 
+import router from '../routes';
  
 export function createApp() { 
   const app = express(); 
@@ -19,12 +19,10 @@ export function createApp() {
   // CORS configuration
   app.use(cors()); 
   
-  // Trust proxy (important for rate limiting behind reverse proxy)
   app.set('trust proxy', 1);
-  
-  // Global rate limiter (applies to all routes)
+
   app.use(globalRateLimiter);
-  
+
   // Body parsing
   app.use(express.json()); 
   // Static serving for uploaded assets (local CDN simulation)

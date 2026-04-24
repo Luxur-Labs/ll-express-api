@@ -1,5 +1,53 @@
+import { Prisma } from '@prisma/client';
 import { createOrderTransition } from '../utils/orderTransitions';
 import { prisma } from '../utils/prisma';
+
+function numFromDecimal(d: Prisma.Decimal | null | undefined): number {
+  if (d === null || d === undefined) return 0;
+  return typeof d === 'number' ? d : d.toNumber();
+}
+
+/** Persisted line price/discount; falls back to catalog when omitted (legacy clients). */
+function resolveLinePricing(
+  input: { unitPrice?: number | null; discountPercent?: number | null },
+  catalog: { price: Prisma.Decimal; discount: Prisma.Decimal }
+): { unitPrice: Prisma.Decimal; discountPercent: Prisma.Decimal } {
+  const u =
+    input.unitPrice !== undefined && input.unitPrice !== null && Number.isFinite(Number(input.unitPrice))
+      ? Number(input.unitPrice)
+      : numFromDecimal(catalog.price);
+  const d =
+    input.discountPercent !== undefined &&
+    input.discountPercent !== null &&
+    Number.isFinite(Number(input.discountPercent))
+      ? Number(input.discountPercent)
+      : numFromDecimal(catalog.discount);
+  return {
+    unitPrice: new Prisma.Decimal(u),
+    discountPercent: new Prisma.Decimal(d),
+  };
+}
+
+function serializeOrderProduct(op: any) {
+  const linePrice = op.unitPrice != null ? op.unitPrice : op.product?.price;
+  const lineDiscount =
+    op.discountPercent != null ? op.discountPercent : op.product?.discount;
+  return {
+    ...op,
+    // Backward-compatible keys used by some legacy UIs.
+    price: linePrice != null ? linePrice.toString() : null,
+    discount: lineDiscount != null ? lineDiscount.toString() : null,
+    unitPrice: op.unitPrice != null ? op.unitPrice.toString() : null,
+    discountPercent: op.discountPercent != null ? op.discountPercent.toString() : null,
+    product: op.product
+      ? {
+          ...op.product,
+          price: op.product.price.toString(),
+          discount: op.product.discount.toString(),
+        }
+      : null,
+  };
+}
 
 export interface CreateOrderProductData {
   productId: string;
@@ -14,6 +62,10 @@ export interface CreateOrderProductData {
   repeatCorrections: string;
   enterReason: string;
   unitNumbers?: string;
+  /** Unit price charged on this line (optional; defaults from Product). */
+  unitPrice?: number | null;
+  /** Discount % on this line (optional; defaults from Product). */
+  discountPercent?: number | null;
 }
 
 export interface UpdateOrderProductData extends CreateOrderProductData {
@@ -139,7 +191,14 @@ export class OrderService {
         },
       });
     }
-    
+
+    const productIds = [...new Set(data.orderProducts.map((p) => p.productId))];
+    const catalogRows = await prisma.product.findMany({ where: { id: { in: productIds } } });
+    if (catalogRows.length !== productIds.length) {
+      throw new Error('One or more products were not found');
+    }
+    const catalogById = new Map(catalogRows.map((p) => [p.id, p]));
+
     const order = await prisma.order.create({
       data: {
         id: orderId,
@@ -154,7 +213,12 @@ export class OrderService {
         estimateDate: data.estimateDate,
         status: data.status || 'NEW',
         orderProducts: {
-          create: data.orderProducts.map(product => {
+          create: data.orderProducts.map((product) => {
+            const prod = catalogById.get(product.productId)!;
+            const { unitPrice, discountPercent } = resolveLinePricing(
+              { unitPrice: product.unitPrice, discountPercent: product.discountPercent },
+              { price: prod.price, discount: prod.discount }
+            );
             const productData: any = {
               productId: product.productId,
               shadeType: product.shadeType,
@@ -165,8 +229,10 @@ export class OrderService {
               ponticDesign: product.ponticDesign,
               repeatCorrections: product.repeatCorrections,
               enterReason: product.enterReason,
+              unitPrice,
+              discountPercent,
             };
-            
+
             // Only include optional fields if they're provided
             if (product.workType !== undefined) {
               productData.workType = product.workType;
@@ -177,9 +243,9 @@ export class OrderService {
             if (product.unitNumbers !== undefined) {
               productData.unitNumbers = product.unitNumbers;
             }
-            
+
             return productData;
-          })
+          }),
         },
         files: data.files ? {
           create: data.files.map(file => ({
@@ -239,17 +305,9 @@ export class OrderService {
       remarks: 'Order created',
     });
 
-    // Convert Decimal fields to strings for JSON serialization
     return {
       ...order,
-      orderProducts: order.orderProducts.map((op: any) => ({
-        ...op,
-        product: op.product ? {
-          ...op.product,
-          price: op.product.price.toString(),
-          discount: op.product.discount.toString(),
-        } : null,
-      })),
+      orderProducts: order.orderProducts.map((op: any) => serializeOrderProduct(op)),
     };
   }
 
@@ -298,14 +356,7 @@ export class OrderService {
       delete orderData.doctorName;
       return {
         ...orderData,
-        orderProducts: order.orderProducts.map(op => ({
-          ...op,
-          product: op.product ? {
-            ...op.product,
-            price: op.product.price.toString(),
-            discount: op.product.discount.toString(),
-          } : null,
-        })),
+        orderProducts: order.orderProducts.map((op: any) => serializeOrderProduct(op)),
       };
     }
 
@@ -357,14 +408,7 @@ export class OrderService {
       delete orderData.doctorName;
       return {
         ...orderData,
-        orderProducts: order.orderProducts.map(op => ({
-          ...op,
-          product: op.product ? {
-            ...op.product,
-            price: op.product.price.toString(),
-            discount: op.product.discount.toString(),
-          } : null,
-        })),
+        orderProducts: order.orderProducts.map((op: any) => serializeOrderProduct(op)),
       };
     }
 
@@ -587,7 +631,11 @@ export class OrderService {
           estimateDate: order.estimateDate.getTime(),
           dateOfApproach: order.dateOfApproach ? order.dateOfApproach.getTime() : null,
           createdOn: order.createdAt.getTime(),
-          amount: order.orderProducts.reduce((sum: number, op: any) => sum + Number(op.product.price), 0),
+          amount: order.orderProducts.reduce((sum: number, op: any) => {
+            const rate =
+              op.unitPrice != null ? Number(op.unitPrice) : Number(op.product?.price ?? 0);
+            return sum + rate;
+          }, 0),
           assignedGroup: null,
           orderProducts: order.orderProducts.map((op: any) => op.product.code || '').filter((code: string) => code).join(', '),
           patientName: order.patient.name,
@@ -643,16 +691,9 @@ export class OrderService {
     });
 
     // Convert Decimal fields to strings for JSON serialization
-    return orders.map(order => ({
+    return orders.map((order) => ({
       ...order,
-      orderProducts: order.orderProducts.map(op => ({
-        ...op,
-        product: op.product ? {
-          ...op.product,
-          price: op.product.price.toString(),
-          discount: op.product.discount.toString(),
-        } : null,
-      })),
+      orderProducts: order.orderProducts.map((op: any) => serializeOrderProduct(op)),
     }));
   }
 
@@ -727,6 +768,13 @@ export class OrderService {
 
     // Handle orderProducts update if provided
     if (data.orderProducts !== undefined) {
+      const productIds = [...new Set(data.orderProducts.map((p) => p.productId))];
+      const catalogRows = await prisma.product.findMany({ where: { id: { in: productIds } } });
+      if (catalogRows.length !== productIds.length) {
+        throw new Error('One or more products were not found');
+      }
+      const catalogById = new Map(catalogRows.map((p) => [p.id, p]));
+
       // Separate products to update vs create
       const productsToUpdate = data.orderProducts.filter(p => p.id);
       const productsToCreate = data.orderProducts.filter(p => !p.id);
@@ -748,7 +796,12 @@ export class OrderService {
       }
 
       // Update existing products
-      const updateOperations = productsToUpdate.map(product => {
+      const updateOperations = productsToUpdate.map((product) => {
+        const prod = catalogById.get(product.productId)!;
+        const { unitPrice, discountPercent } = resolveLinePricing(
+          { unitPrice: product.unitPrice, discountPercent: product.discountPercent },
+          { price: prod.price, discount: prod.discount }
+        );
         const updateProductData: any = {
           productId: product.productId,
           shadeType: product.shadeType,
@@ -759,8 +812,10 @@ export class OrderService {
           ponticDesign: product.ponticDesign,
           repeatCorrections: product.repeatCorrections,
           enterReason: product.enterReason,
+          unitPrice,
+          discountPercent,
         };
-        
+
         // Only include optional fields if they're provided
         if (product.workType !== undefined) {
           updateProductData.workType = product.workType;
@@ -771,7 +826,7 @@ export class OrderService {
         if (product.unitNumbers !== undefined) {
           updateProductData.unitNumbers = product.unitNumbers;
         }
-        
+
         return prisma.orderProduct.update({
           where: { id: product.id! },
           data: updateProductData,
@@ -782,7 +837,12 @@ export class OrderService {
       // Create new products
       if (productsToCreate.length > 0) {
         updateData.orderProducts = {
-          create: productsToCreate.map(product => {
+          create: productsToCreate.map((product) => {
+            const prod = catalogById.get(product.productId)!;
+            const { unitPrice, discountPercent } = resolveLinePricing(
+              { unitPrice: product.unitPrice, discountPercent: product.discountPercent },
+              { price: prod.price, discount: prod.discount }
+            );
             const productData: any = {
               productId: product.productId,
               shadeType: product.shadeType,
@@ -793,8 +853,10 @@ export class OrderService {
               ponticDesign: product.ponticDesign,
               repeatCorrections: product.repeatCorrections,
               enterReason: product.enterReason,
+              unitPrice,
+              discountPercent,
             };
-            
+
             // Only include optional fields if they're provided
             if (product.workType !== undefined) {
               productData.workType = product.workType;
@@ -805,7 +867,7 @@ export class OrderService {
             if (product.unitNumbers !== undefined) {
               productData.unitNumbers = product.unitNumbers;
             }
-            
+
             return productData;
           }),
         };
@@ -920,17 +982,9 @@ export class OrderService {
       });
     }
 
-    // Convert Decimal fields to strings for JSON serialization
     return {
       ...updatedOrder,
-      orderProducts: updatedOrder.orderProducts.map(op => ({
-        ...op,
-        product: op.product ? {
-          ...op.product,
-          price: op.product.price.toString(),
-          discount: op.product.discount.toString(),
-        } : null,
-      })),
+      orderProducts: updatedOrder.orderProducts.map((op: any) => serializeOrderProduct(op)),
     };
   }
 

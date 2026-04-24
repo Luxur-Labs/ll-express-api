@@ -1,13 +1,17 @@
+import { env } from '../config/env';
 import { prisma } from '../utils/prisma';
 import { logger } from '../utils/logger';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 30;
+const lockoutDisabled = env.NODE_ENV === 'development';
 
 /**
  * Check if account is currently locked
  */
 export async function isAccountLocked(email: string): Promise<boolean> {
+  if (lockoutDisabled) return false;
+
   const user = await prisma.user.findUnique({
     where: { email },
     select: { accountLockedUntil: true },
@@ -44,7 +48,7 @@ export async function recordFailedLogin(email: string, ip: string): Promise<void
   if (!user) return; // Don't reveal if user exists
 
   const newFailedAttempts = user.failedLoginAttempts + 1;
-  const shouldLock = newFailedAttempts >= MAX_FAILED_ATTEMPTS;
+  const shouldLock = !lockoutDisabled && newFailedAttempts >= MAX_FAILED_ATTEMPTS;
 
   const updateData: any = {
     failedLoginAttempts: newFailedAttempts,

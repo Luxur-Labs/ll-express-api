@@ -166,8 +166,11 @@ export async function getProductsByPriceRangeController(req: Request, res: Respo
 
 export async function getProductsListController(req: Request, res: Response) {
   try {
-    const products = await productService.getProductsList();
-    return res.json(products);
+    const page = Number(req.query.page) || 0;
+    const limit = Number(req.query.limit) || 50;
+    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+    const result = await productService.getProductsList(page, limit, search);
+    return res.json(result);
   } catch (error) {
     console.error('Error fetching products list:', error);
     return res.status(500).json({ message: 'Internal server error' });

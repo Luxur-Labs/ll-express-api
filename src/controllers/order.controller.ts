@@ -78,7 +78,16 @@ export async function createOrderController(req: Request, res: Response) {
 
     await orderService.createOrder(orderData);
     return res.status(201).json({ message: 'Created order successfully' });
-  } catch (error) {
+  } catch (error: any) {
+    if (
+      error?.code === 'P2002' &&
+      Array.isArray(error?.meta?.target) &&
+      error.meta.target.includes('invoiceNumber')
+    ) {
+      return res.status(409).json({
+        message: `Invoice number '${req.body?.invoiceNumber || ''}' already exists. Please use a different invoice number.`,
+      });
+    }
     console.error('Error creating order:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
@@ -310,7 +319,16 @@ export async function updateOrderController(req: Request, res: Response) {
 
     const updatedOrder = await orderService.updateOrder(id, updateData, (req as any).user?.id);
     return res.json(updatedOrder);
-  } catch (error) {
+  } catch (error: any) {
+    if (
+      error?.code === 'P2002' &&
+      Array.isArray(error?.meta?.target) &&
+      error.meta.target.includes('invoiceNumber')
+    ) {
+      return res.status(409).json({
+        message: `Invoice number '${req.body?.invoiceNumber || ''}' already exists. Please use a different invoice number.`,
+      });
+    }
     console.error('Error updating order:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
