@@ -44,6 +44,12 @@ export class RazorpayService {
     });
   }
 
+  /** Fetch order to read amount in paise (for partial / bulk payment verification). */
+  async fetchOrder(orderId: string) {
+    const client = this.getClient();
+    return client.orders.fetch(orderId);
+  }
+
   verifyPaymentSignature(input: {
     razorpayOrderId: string;
     razorpayPaymentId: string;

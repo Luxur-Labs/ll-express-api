@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 
 import { OrderService, CreateOrderData, UpdateOrderData } from '../services/order.service';
+import type { AuthUser } from '../types/auth';
 
 const orderService = new OrderService();
 
@@ -330,6 +331,31 @@ export async function updateOrderController(req: Request, res: Response) {
       });
     }
     console.error('Error updating order:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+export async function addOrderActivityNoteController(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { note } = req.body as { note?: string };
+    const user = res.locals.user as AuthUser | undefined;
+
+    if (!id) {
+      return res.status(400).json({ message: 'Order ID is required' });
+    }
+
+    const order = await orderService.addOrderActivityNote(id, user?.id, note ?? '');
+    return res.status(201).json(order);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '';
+    if (message === 'Order not found') {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    if (message === 'Note cannot be empty') {
+      return res.status(400).json({ message: 'Note cannot be empty' });
+    }
+    console.error('Error adding order activity note:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }

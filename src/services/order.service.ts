@@ -28,6 +28,42 @@ function resolveLinePricing(
   };
 }
 
+type OrderTransitionRow = {
+  id: string;
+  orderId: string;
+  fromState: string | null;
+  toState: string;
+  transitionedBy: string | null;
+  remarks: string | null;
+  transitionOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+async function formatTransitionsForApi(transitions: OrderTransitionRow[]) {
+  const userIds = [...new Set(transitions.map((t) => t.transitionedBy).filter((x): x is string => !!x))];
+  let userMap = new Map<string, { id: string; name: string | null; email: string }>();
+  if (userIds.length > 0) {
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true, email: true },
+    });
+    userMap = new Map(users.map((u) => [u.id, u]));
+  }
+  return transitions.map((t) => ({
+    id: t.id,
+    orderId: t.orderId,
+    fromState: t.fromState,
+    toState: t.toState,
+    transitionedBy: t.transitionedBy,
+    transitionedByUser: t.transitionedBy ? userMap.get(t.transitionedBy) ?? null : null,
+    remarks: t.remarks,
+    transitionOrder: t.transitionOrder,
+    createdAt: t.createdAt.toISOString(),
+    updatedAt: t.updatedAt.toISOString(),
+  }));
+}
+
 function serializeOrderProduct(op: any) {
   const linePrice = op.unitPrice != null ? op.unitPrice : op.product?.price;
   const lineDiscount =
@@ -347,6 +383,9 @@ export class OrderService {
           },
         },
         files: true,
+        transitions: {
+          orderBy: { transitionOrder: 'asc' },
+        },
       },
     });
 
@@ -354,8 +393,10 @@ export class OrderService {
     if (order) {
       const orderData = { ...order } as any;
       delete orderData.doctorName;
+      const transitions = await formatTransitionsForApi(order.transitions ?? []);
       return {
         ...orderData,
+        transitions,
         orderProducts: order.orderProducts.map((op: any) => serializeOrderProduct(op)),
       };
     }
@@ -399,6 +440,9 @@ export class OrderService {
           },
         },
         files: true,
+        transitions: {
+          orderBy: { transitionOrder: 'asc' },
+        },
       },
     });
 
@@ -406,13 +450,42 @@ export class OrderService {
     if (order) {
       const orderData = { ...order } as any;
       delete orderData.doctorName;
+      const transitions = await formatTransitionsForApi(order.transitions ?? []);
       return {
         ...orderData,
+        transitions,
         orderProducts: order.orderProducts.map((op: any) => serializeOrderProduct(op)),
       };
     }
 
     return order;
+  }
+
+  /**
+   * Append a user-visible note on the order timeline without changing status.
+   * Persisted as an OrderTransition with fromState === toState === current status.
+   */
+  async addOrderActivityNote(orderId: string, userId: string | undefined, note: string) {
+    const trimmed = (note || '').trim();
+    if (!trimmed) {
+      throw new Error('Note cannot be empty');
+    }
+    const existing = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { status: true },
+    });
+    if (!existing) {
+      throw new Error('Order not found');
+    }
+    const status = existing.status || 'NEW';
+    await createOrderTransition({
+      orderId,
+      fromState: status,
+      toState: status,
+      transitionedBy: userId,
+      remarks: trimmed,
+    });
+    return this.getOrderById(orderId);
   }
 
   async getOrdersList(filters: {

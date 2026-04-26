@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { BillingPeriodType } from '@prisma/client';
 import { BillingService } from '../services/billing.service';
+import { notifyClinicInvoiceWhatsApp } from '../services/whatsappInvoiceNotify.service';
 
 const billingService = new BillingService();
 
@@ -35,6 +36,22 @@ export async function previewBillingInvoiceController(req: Request, res: Respons
   }
 }
 
+/** Single-order tax invoice payload (same shape as POST /invoices/preview) for printing from order details. */
+export async function previewOrderInvoicePrintController(req: Request, res: Response) {
+  try {
+    const { orderId } = req.params;
+    if (!orderId) return res.status(400).json({ message: 'orderId is required' });
+    const data = await billingService.previewInvoiceForOrderPrint(orderId);
+    return res.json(data);
+  } catch (e: any) {
+    const msg = e?.message || 'Preview failed';
+    if (String(msg).toLowerCase().includes('not found')) {
+      return res.status(404).json({ message: msg });
+    }
+    return res.status(400).json({ message: msg });
+  }
+}
+
 export async function finalizeBillingInvoiceController(req: Request, res: Response) {
   try {
     const { clinicId, dateFrom, dateTo, periodType, receivedAmount, creditsAdjusted, roundOff, isPaid } =
@@ -54,6 +71,18 @@ export async function finalizeBillingInvoiceController(req: Request, res: Respon
       roundOff: Number(roundOff) || 0,
       isPaid: Boolean(isPaid),
     });
+    if (data?.clinic?.contactNumber && data?.id) {
+      void notifyClinicInvoiceWhatsApp({
+        id: data.id,
+        invoiceNumber: data.invoiceNumber,
+        periodLabel: data.periodLabel,
+        netPayable: data.netPayable,
+        clinic: {
+          clinicName: data.clinic.clinicName,
+          contactNumber: data.clinic.contactNumber,
+        },
+      }).catch((e) => console.error('[whatsapp-invoice]', e));
+    }
     return res.status(201).json(data);
   } catch (e: any) {
     const message = e?.message || 'Finalize failed';
@@ -75,12 +104,37 @@ export async function getBillingLedgerController(req: Request, res: Response) {
   }
 }
 
+export async function getBillingClinicInvoiceCountsController(req: Request, res: Response) {
+  try {
+    const { clinicId } = req.params;
+    const counts = await billingService.clinicInvoiceStatusCounts(clinicId);
+    return res.json(counts);
+  } catch (e: any) {
+    return res.status(400).json({ message: e?.message || 'Count failed' });
+  }
+}
+
 export async function listBillingInvoicesController(req: Request, res: Response) {
   try {
     const { clinicId } = req.params;
-    const take = Math.min(200, Math.max(1, Number(req.query.take) || 50));
-    const data = await billingService.listInvoices(clinicId, take);
-    return res.json({ data });
+    const take = Math.min(100, Math.max(1, Number(req.query.take) || 50));
+    const skip = Math.max(0, Number(req.query.skip) || 0);
+    const statusRaw = String(req.query.status ?? 'all').toLowerCase();
+    const allowed: Array<'all' | 'open' | 'partial' | 'paid' | 'cancelled'> = [
+      'all',
+      'open',
+      'partial',
+      'paid',
+      'cancelled',
+    ];
+    const status = (allowed.includes(statusRaw as any) ? statusRaw : 'all') as
+      | 'all'
+      | 'open'
+      | 'partial'
+      | 'paid'
+      | 'cancelled';
+    const { data, total } = await billingService.listInvoices(clinicId, { take, skip, status });
+    return res.json({ data, total });
   } catch (e: any) {
     return res.status(400).json({ message: e?.message || 'List failed' });
   }
@@ -153,10 +207,110 @@ export async function patchBillingInvoicePaymentController(req: Request, res: Re
 export async function createRazorpayInvoiceOrderController(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const data = await billingService.createRazorpayOrderForInvoice(id);
+    const amount = req.body?.amount;
+    const data = await billingService.createRazorpayOrderForInvoice(
+      id,
+      amount != null ? Number(amount) : undefined
+    );
     return res.json(data);
   } catch (e: any) {
     return res.status(400).json({ message: e?.message || 'Failed to create Razorpay order' });
+  }
+}
+
+export async function recordCashPaymentOnInvoiceController(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { amount } = req.body || {};
+    if (amount == null || Number(amount) <= 0) {
+      return res.status(400).json({ message: 'amount is required' });
+    }
+    const data = await billingService.recordCashPaymentOnInvoice(id, Number(amount));
+    return res.json(data);
+  } catch (e: any) {
+    return res.status(400).json({ message: e?.message || 'Payment failed' });
+  }
+}
+
+export async function suggestLinePaymentAmountController(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { lineIds } = req.body || {};
+    if (!Array.isArray(lineIds)) {
+      return res.status(400).json({ message: 'lineIds array is required' });
+    }
+    const data = await billingService.suggestAmountFromLineIds(id, lineIds);
+    return res.json(data);
+  } catch (e: any) {
+    return res.status(400).json({ message: e?.message || 'Failed' });
+  }
+}
+
+export async function listOpenInvoicesForClinicController(req: Request, res: Response) {
+  try {
+    const { clinicId } = req.params;
+    const data = await billingService.listOpenInvoicesForClinic(clinicId);
+    return res.json({ data });
+  } catch (e: any) {
+    return res.status(400).json({ message: e?.message || 'Failed' });
+  }
+}
+
+export async function recordClinicMultiCashController(req: Request, res: Response) {
+  try {
+    const { clinicId } = req.params;
+    const { mode, amount, invoiceIds, method } = req.body || {};
+    if (method && method !== 'CASH') {
+      return res.status(400).json({ message: 'This endpoint is for cash; use /razorpay/order for online' });
+    }
+    if (mode !== 'PENDING_TOTAL' && mode !== 'SELECTED' && mode !== 'CUSTOM') {
+      return res.status(400).json({ message: 'mode must be PENDING_TOTAL, SELECTED, or CUSTOM' });
+    }
+    const data = await billingService.recordClinicMultiCashPayment(clinicId, {
+      mode,
+      amount: amount != null ? Number(amount) : undefined,
+      invoiceIds: Array.isArray(invoiceIds) ? invoiceIds : undefined,
+    });
+    return res.json(data);
+  } catch (e: any) {
+    return res.status(400).json({ message: e?.message || 'Payment failed' });
+  }
+}
+
+export async function createRazorpayClinicOrderController(req: Request, res: Response) {
+  try {
+    const { clinicId } = req.params;
+    const { mode, amount, invoiceIds } = req.body || {};
+    if (mode !== 'PENDING_TOTAL' && mode !== 'SELECTED' && mode !== 'CUSTOM') {
+      return res.status(400).json({ message: 'mode is required' });
+    }
+    const data = await billingService.createRazorpayOrderForClinic(clinicId, {
+      mode,
+      amount: amount != null ? Number(amount) : undefined,
+      invoiceIds: Array.isArray(invoiceIds) ? invoiceIds : undefined,
+    });
+    return res.json(data);
+  } catch (e: any) {
+    return res.status(400).json({ message: e?.message || 'Failed to create order' });
+  }
+}
+
+export async function verifyRazorpayClinicPaymentController(req: Request, res: Response) {
+  try {
+    const { clinicId } = req.params;
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body || {};
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      return res.status(400).json({ message: 'razorpay fields required' });
+    }
+    const data = await billingService.verifyRazorpayClinicPayment({
+      clinicId,
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+    });
+    return res.json(data);
+  } catch (e: any) {
+    return res.status(400).json({ message: e?.message || 'Verification failed' });
   }
 }
 

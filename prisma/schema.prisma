@@ -96,8 +96,8 @@ enum BillingLedgerEntryType {
   MANUAL
 }
 
-/// Billing period uniqueness (clinicId + periodType + periodLabel) is enforced in PostgreSQL
-/// by a partial unique index that ignores cancelled rows (see migration 20260421120000).
+/// Multiple invoices per clinic+period are allowed (supplemental bills for new order lines).
+/// Cancelled rows use cancelledAt; line-level de-dupe uses BillingInvoiceLine order keys.
 model BillingInvoice {
   id                String              @id @default(uuid())
   clinicId          String

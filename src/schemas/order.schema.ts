@@ -152,6 +152,17 @@ export const updateOrderStatusSchema = z.object({
   params: z.object({}).optional(),
 });
 
+/** Standalone activity note (no status change), stored as a same-state transition. */
+export const addOrderActivityNoteSchema = z.object({
+  body: z.object({
+    note: z.string().min(1, 'Note is required').max(2000, 'Note too long'),
+  }),
+  query: z.object({}).optional(),
+  params: z.object({
+    id: z.string().min(1, 'Order ID is required'),
+  }),
+});
+
 export const ordersListQuerySchema = z.object({
   body: z.object({}).optional(),
   query: z.object({

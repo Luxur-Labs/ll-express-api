@@ -8,6 +8,7 @@ import {
   getOrdersListController,
   updateOrderController,
   updateOrderStatusController,
+  addOrderActivityNoteController,
   deleteOrderController,
   getOrdersByPatientController,
   getOrdersByDoctorController,
@@ -18,7 +19,14 @@ import {
 } from '../controllers/order.controller';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
-import { createOrderSchema, updateOrderSchema, updateOrderStatusSchema, dateRangeQuerySchema, ordersListQuerySchema } from '../schemas/order.schema';
+import {
+  createOrderSchema,
+  updateOrderSchema,
+  updateOrderStatusSchema,
+  addOrderActivityNoteSchema,
+  dateRangeQuerySchema,
+  ordersListQuerySchema,
+} from '../schemas/order.schema';
 
 const router = Router();
 
@@ -37,6 +45,7 @@ router.get('/clinic/:clinicId', getOrdersByClinicController);
 router.get('/partner/:partner', getOrdersByPartnerController);
 router.get('/scanning-mode/:scanningMode', getOrdersByScanningModeController);
 router.get('/date-range', validate(dateRangeQuerySchema), getOrdersByDateRangeController);
+router.post('/:id/activity-notes', validate(addOrderActivityNoteSchema), addOrderActivityNoteController);
 router.get('/:id', getOrderByIdController);
 router.put('/:id', validate(updateOrderSchema), updateOrderController);
 router.patch('/:id/status', validate(updateOrderStatusSchema), updateOrderStatusController);
