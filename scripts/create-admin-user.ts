@@ -1,50 +1,65 @@
+/**
+ * Upsert a SUPER_ADMIN user.
+ *
+ * Env: EMAIL, PASSWORD, ENV_FILE (.env.prod on server)
+ * Default: admin@example.com / admin@123
+ *
+ * Local:  EMAIL=admin@luxur.com PASSWORD='...' npm run prisma:seed:admin
+ * EC2:    EMAIL=admin@luxur.com PASSWORD='...' ./scripts/run-on-server.sh admin
+ * EC2:    docker compose exec api npm run prisma:seed:admin  (with EMAIL/PASSWORD -e)
+ */
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { PrismaClient } from '@prisma/client';
-import { hashPassword } from '../src/utils/password';
+import bcrypt from 'bcryptjs';
+import * as dotenv from 'dotenv';
 
-const prisma = new PrismaClient();
+function loadEnv(): void {
+  const envFile =
+    process.env.ENV_FILE ||
+    (fs.existsSync(path.resolve(process.cwd(), '.env.prod')) ? '.env.prod' : '.env');
+  const resolved = path.resolve(process.cwd(), envFile);
+  if (fs.existsSync(resolved)) {
+    dotenv.config({ path: resolved });
+  }
+}
 
-async function createAdminUser() {
+async function main(): Promise<void> {
+  loadEnv();
+
+  const email = process.env.EMAIL || 'admin@example.com';
+  const password = process.env.PASSWORD || 'admin@123';
+  const rounds = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
+  const passwordHash = await bcrypt.hash(password, rounds);
+  const prisma = new PrismaClient();
+
   try {
-    // Hash the password using the project's utility
-    const hashedPassword = await hashPassword('admin@123');
-
-    // Create or update the admin user
     const adminUser = await prisma.user.upsert({
-      where: { email: 'admin@example.com' },
+      where: { email },
       update: {
-        passwordHash: hashedPassword,
+        passwordHash,
         role: 'SUPER_ADMIN',
         name: 'System Administrator',
       },
       create: {
-        email: 'admin@example.com',
-        passwordHash: hashedPassword,
+        email,
+        passwordHash,
         role: 'SUPER_ADMIN',
         name: 'System Administrator',
-        employeeTypeId: null,
-        technicianGroupId: null,
-        failedLoginAttempts: 0,
-        accountLockedUntil: null,
-        lastLoginAt: null,
-        lastLoginIp: null,
-        dateOfBirth: null,
-        contact: null,
-        document: null,
-        profilePhoto: null,
       },
     });
 
-    console.log('✅ Admin user created/updated successfully:');
-    console.log(`   Email: ${adminUser.email}`);
-    console.log(`   Role: ${adminUser.role}`);
-    console.log(`   Name: ${adminUser.name}`);
-    console.log(`   ID: ${adminUser.id}`);
-    
-  } catch (error) {
-    console.error('❌ Error creating admin user:', error);
+    console.log('Admin user created/updated:');
+    console.log(`  email: ${adminUser.email}`);
+    console.log(`  role:  ${adminUser.role}`);
+    console.log(`  id:    ${adminUser.id}`);
   } finally {
     await prisma.$disconnect();
   }
 }
 
-createAdminUser();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -13,7 +13,10 @@
     "type-check": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
-    "prisma:seed": "ts-node prisma/seed.ts"
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:seed:admin": "ts-node scripts/create-admin-user.ts",
+    "prisma:seed:demo": "ts-node scripts/create-demo-users.ts",
+    "script:run": "bash scripts/run-on-server.sh"
   },
   "keywords": [],
   "author": "",
