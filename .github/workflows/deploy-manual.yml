@@ -1,0 +1,181 @@
+# Manual backend deploy — workflow_dispatch only.
+# Job 1: build + push to ECR (inlined).
+# Job 2: deploy on EC2 via SSM Run Command (no SSH).
+#
+# Required GitHub Secrets (production environment):
+#   AWS_REGION, AWS_ACCOUNT_ID, ECR_REPOSITORY, SSM_PREFIX, EC2_APP_DIR, EC2_INSTANCE_ID
+#   AWS_ROLE_ARN (OIDC) OR AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY
+#
+# EC2 prerequisites: SSM Agent online, instance profile with AmazonSSMManagedInstanceCore
+# + app permissions (ECR pull, SSM read). See scripts/iam-*.example.json
+
+name: Deploy (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_ec2:
+        description: Deploy to EC2 after image push
+        type: boolean
+        default: true
+      run_migrations:
+        description: Run prisma migrate deploy on EC2
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-backend-prod
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Build and push image to ECR
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          ECR_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+          aws ecr get-login-password --region "$AWS_REGION" | \
+            docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          docker build -t ll-express-api:latest .
+          docker tag ll-express-api:latest "$ECR_IMAGE"
+          docker push "$ECR_IMAGE"
+          echo "Pushed $ECR_IMAGE"
+
+  deploy-ec2:
+    needs: build-and-push
+    if: ${{ inputs.deploy_ec2 }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy on EC2 via SSM Run Command
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          SSM_PREFIX: ${{ secrets.SSM_PREFIX }}
+          EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
+          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          RUN_MIGRATIONS: ${{ inputs.run_migrations }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${EC2_INSTANCE_ID:-}" ]]; then
+            echo "Missing secret EC2_INSTANCE_ID (e.g. i-0abc123def4567890)" >&2
+            exit 1
+          fi
+
+          SKIP_MIGRATE_ENV=""
+          if [[ "$RUN_MIGRATIONS" != "true" ]]; then
+            SKIP_MIGRATE_ENV="SKIP_MIGRATE=1"
+          fi
+
+          DEPLOY_SCRIPT=$(cat <<EOS
+          #!/bin/bash
+          set -euo pipefail
+          sudo -u ec2-user env \
+            AWS_REGION='${AWS_REGION}' \
+            AWS_ACCOUNT_ID='${AWS_ACCOUNT_ID}' \
+            ECR_REPOSITORY='${ECR_REPOSITORY}' \
+            SSM_PREFIX='${SSM_PREFIX}' \
+            SKIP_AWS_LOGIN=1 \
+            GITHUB_ACTIONS=true \
+            ${SKIP_MIGRATE_ENV} \
+            bash <<DEPLOY_EOF
+          set -euo pipefail
+          cd ${EC2_APP_DIR}
+          git pull --ff-only || true
+          chmod +x scripts/deploy-aws.sh scripts/deploy-ecr-with-ssm.sh scripts/ssm-to-env-prod.sh 2>/dev/null || true
+          ./scripts/deploy-aws.sh ec2
+          DEPLOY_EOF
+          EOS
+          )
+
+          PARAMS=$(jq -n \
+            --arg wd "$EC2_APP_DIR" \
+            --arg cmd "$DEPLOY_SCRIPT" \
+            '{workingDirectory: [$wd], executionTimeout: ["3600"], commands: [$cmd]}')
+
+          COMMAND_ID=$(aws ssm send-command \
+            --region "$AWS_REGION" \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "GitHub Actions backend deploy" \
+            --parameters "$PARAMS" \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "SSM CommandId: $COMMAND_ID"
+
+          STATUS="Pending"
+          for i in $(seq 1 60); do
+            STATUS=$(aws ssm get-command-invocation \
+              --region "$AWS_REGION" \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --query 'Status' \
+              --output text 2>/dev/null || echo "Pending")
+            echo "Status: $STATUS (attempt $i/60)"
+            case "$STATUS" in
+              Success) break ;;
+              Failed|Cancelled|TimedOut|Cancelling)
+                echo "=== SSM stdout ==="
+                aws ssm get-command-invocation \
+                  --region "$AWS_REGION" \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$EC2_INSTANCE_ID" \
+                  --query 'StandardOutputContent' \
+                  --output text || true
+                echo "=== SSM stderr ==="
+                aws ssm get-command-invocation \
+                  --region "$AWS_REGION" \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$EC2_INSTANCE_ID" \
+                  --query 'StandardErrorContent' \
+                  --output text || true
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+
+          if [[ "$STATUS" != "Success" ]]; then
+            echo "Deploy timed out waiting for SSM command $COMMAND_ID" >&2
+            exit 1
+          fi
+
+          echo "=== SSM stdout ==="
+          aws ssm get-command-invocation \
+            --region "$AWS_REGION" \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query 'StandardOutputContent' \
+            --output text
