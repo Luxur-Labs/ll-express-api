@@ -1,6 +1,6 @@
 # Manual backend deploy — workflow_dispatch only.
-# Job 1: build + push to ECR (inlined).
-# Job 2: deploy on EC2 via SSM Run Command (no SSH).
+# Repo: https://github.com/Luxur-Labs/ll-express-api
+# Job 1: build + push to ECR (inlined). Job 2: deploy on EC2 via SSM Run Command.
 #
 # Required GitHub Secrets (production environment):
 #   AWS_REGION, AWS_ACCOUNT_ID, ECR_REPOSITORY, SSM_PREFIX, EC2_APP_DIR, EC2_INSTANCE_ID
