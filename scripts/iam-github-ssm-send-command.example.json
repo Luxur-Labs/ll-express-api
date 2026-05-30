@@ -26,7 +26,7 @@
       "Effect": "Allow",
       "Action": "ssm:SendCommand",
       "Resource": [
-        "arn:aws:ec2:ap-south-2:378595783871:instance/EC2_INSTANCE_ID",
+        "arn:aws:ec2:ap-south-2:378595783871:instance/i-0ab53b5598ec58197",
         "arn:aws:ssm:ap-south-2:378595783871:document/AWS-RunShellScript"
       ]
     },
