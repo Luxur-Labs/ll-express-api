@@ -112,7 +112,6 @@ jobs:
             bash <<DEPLOY_EOF
           set -euo pipefail
           cd ${EC2_APP_DIR}
-          git pull --ff-only || true
           chmod +x scripts/deploy-aws.sh scripts/deploy-ecr-with-ssm.sh scripts/ssm-to-env-prod.sh 2>/dev/null || true
           ./scripts/deploy-aws.sh ec2
           DEPLOY_EOF

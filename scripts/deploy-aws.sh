@@ -93,7 +93,9 @@ cmd_ec2() {
   cd "$APP_DIR"
   export COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 
-  if [[ "${GITHUB_ACTIONS:-}" != "true" && "${SKIP_AWS_LOGIN:-0}" != "1" ]]; then
+  if [[ "${SKIP_AWS_LOGIN:-0}" == "1" || "${GITHUB_ACTIONS:-}" == "true" ]]; then
+    unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE 2>/dev/null || true
+  elif [[ "${SKIP_AWS_LOGIN:-0}" != "1" ]]; then
     aws login --remote
   fi
 
