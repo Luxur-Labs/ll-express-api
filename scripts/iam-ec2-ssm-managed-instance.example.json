@@ -24,9 +24,19 @@
       "Effect": "Allow",
       "Action": [
         "ssm:GetParametersByPath",
-        "ssm:GetParameters"
+        "ssm:GetParameters",
+        "ssm:GetParameter"
       ],
-      "Resource": "arn:aws:ssm:ap-south-2:378595783871:parameter/luxur/api/prod/*"
+      "Resource": [
+        "arn:aws:ssm:ap-south-2:ACCOUNT_ID:parameter/luxur/api/prod",
+        "arn:aws:ssm:ap-south-2:ACCOUNT_ID:parameter/luxur/api/prod/*"
+      ]
+    },
+    {
+      "Sid": "DecryptSSMSecureStrings",
+      "Effect": "Allow",
+      "Action": ["kms:Decrypt"],
+      "Resource": "arn:aws:kms:ap-south-2:ACCOUNT_ID:key/SSM_KMS_KEY_ID"
     },
     {
       "Sid": "EcrAuthToken",
