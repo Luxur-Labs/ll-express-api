@@ -1,0 +1,14 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadAppParametersFromSSM",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParametersByPath",
+        "ssm:GetParameters"
+      ],
+      "Resource": "arn:aws:ssm:ap-south-2:ACCOUNT_ID:parameter/luxur/api/prod/*"
+    }
+  ]
+}

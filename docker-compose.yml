@@ -1,0 +1,33 @@
+# AWS deployment guide §6.2 Option A — pull the API image from Amazon ECR (RDS + Nginx on host).
+#
+# Workstation: build, tag, push to ECR (see guide). Target platform should match EC2 (e.g. arm64 for t4g).
+#
+# Set ECR_IMAGE before compose (full URI including tag), e.g.:
+#   export ECR_IMAGE=123456789012.dkr.ecr.ap-south-2.amazonaws.com/ll-express-api:latest
+# Or put ECR_IMAGE=... in a .env file in this directory (Compose uses it for interpolation only).
+#
+# On EC2 — either refresh .env.prod from SSM then compose manually, or use:
+#   export ECR_IMAGE=... ; ./scripts/deploy-ecr-with-ssm.sh <ACCOUNT_ID> ap-south-2 /luxur/prod
+# See scripts/ssm-to-env-prod.sh and deployment-guide-aws-ap-south-2.html §6.4.1.
+
+services:
+  api:
+    image: 378595783871.dkr.ecr.ap-south-2.amazonaws.com/luxarlabs/expressapi:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env.prod
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    volumes:
+      - api_uploads:/app/uploads
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  api_uploads:
