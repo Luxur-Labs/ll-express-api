@@ -23,8 +23,9 @@ export function createApp() {
 
   app.use(globalRateLimiter);
 
-  // Body parsing
-  app.use(express.json()); 
+  // Body parsing (import endpoints may send large row batches)
+  app.use(express.json({ limit: '15mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '15mb' }));
   // Static serving for uploaded assets (local CDN simulation)
   app.use('/static', express.static(path.resolve('uploads')));
   

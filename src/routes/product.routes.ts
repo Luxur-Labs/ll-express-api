@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 
 import {
   createProductController,
@@ -8,24 +9,33 @@ import {
   deleteProductController,
   getProductsByPriceRangeController,
   getProductsListController,
+  importProductsFileController,
 } from '../controllers/product.controller';
-import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
+import { authenticate, authorizePermissions, authorizeRoles } from '../middleware/auth.middleware';
+import { ADMIN_ROLES } from '../config/permissions';
 import { validate } from '../middleware/validate.middleware';
 import { createProductSchema, updateProductSchema, priceRangeQuerySchema } from '../schemas/product.schema';
 
 const router = Router();
 
-// All product routes require SUPER_ADMIN role
-router.use(authenticate);
-router.use(authorizeRoles('SUPER_ADMIN'));
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
-// CRUD operations for products
-router.post('/', validate(createProductSchema), createProductController);
-router.get('/', getAllProductsController);
-router.get('/list', getProductsListController);
-router.get('/price-range', validate(priceRangeQuerySchema), getProductsByPriceRangeController);
-router.get('/:id', getProductByIdController);
-router.put('/:id', validate(updateProductSchema), updateProductController);
-router.delete('/:id', deleteProductController);
+const adminRoles = [...ADMIN_ROLES] as Parameters<typeof authorizeRoles>;
+
+router.use(authenticate);
+
+router.post('/import/file', authorizePermissions('products.import'), upload.single('file'), importProductsFileController);
+
+router.get('/', authorizeRoles(...adminRoles), getAllProductsController);
+router.get('/list', authorizeRoles(...adminRoles), getProductsListController);
+router.get('/price-range', authorizeRoles(...adminRoles), validate(priceRangeQuerySchema), getProductsByPriceRangeController);
+router.get('/:id', authorizeRoles(...adminRoles), getProductByIdController);
+
+router.post('/', authorizePermissions('products.manage'), validate(createProductSchema), createProductController);
+router.put('/:id', authorizePermissions('products.manage'), validate(updateProductSchema), updateProductController);
+router.delete('/:id', authorizePermissions('products.manage'), deleteProductController);
 
 export default router;

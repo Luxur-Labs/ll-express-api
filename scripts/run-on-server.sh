@@ -109,13 +109,13 @@ run_npm() {
 
 case "$TASK" in
   admin)
-    run_npm prisma:seed:admin
+    run_ts scripts/create-admin-user.ts
     ;;
   seed)
-    run_npm prisma:seed
+    run_ts prisma/seed.ts
     ;;
   demo)
-    run_npm prisma:seed:demo
+    run_ts scripts/create-demo-users.ts
     ;;
   *)
     echo "Unknown task: $TASK"

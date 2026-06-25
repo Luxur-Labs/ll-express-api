@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { createOrderTransition } from '../utils/orderTransitions';
 import { prisma } from '../utils/prisma';
+import { createUserStampFields, updateUserStampFields, userStampInclude } from '../utils/userStamps';
+import { isCancelledOrderStatus } from '../utils/orderStatus';
 
 function numFromDecimal(d: Prisma.Decimal | null | undefined): number {
   if (d === null || d === undefined) return 0;
@@ -125,9 +127,22 @@ export interface UpdateFileData extends CreateFileData {
 
 export interface CreatePatientData {
   name: string;
-  age: number;
-  gender: string;
+  age?: number;
+  gender?: string;
   contactNumber?: string;
+}
+
+function normalizePatientData(patient: CreatePatientData) {
+  const parsedAge =
+    typeof patient.age === 'number'
+      ? patient.age
+      : parseInt(String(patient.age ?? ''), 10);
+  return {
+    name: patient.name,
+    age: Number.isFinite(parsedAge) ? parsedAge : 0,
+    gender: (patient.gender ?? '').trim(),
+    contactNumber: patient.contactNumber,
+  };
 }
 
 export type OrderStatusType =
@@ -144,7 +159,9 @@ export type OrderStatusType =
   | 'CANCELLED';
 
 export interface CreateOrderData {
-  invoiceNumber: string;
+  /** When provided (e.g. sheet import), used as Order.id instead of auto-generated ODLUX… id */
+  id?: string;
+  invoiceNumber?: string;
   patient: CreatePatientData; // Changed from patientId to patient object
   doctorId?: string;
   clinicId: string;
@@ -152,6 +169,10 @@ export interface CreateOrderData {
   referenceName?: string;
   partner: string;
   estimateDate: Date;
+  scanningMode?: string;
+  schedule?: Date;
+  enterRemark?: string;
+  dateOfApproach?: Date;
   orderProducts: CreateOrderProductData[];
   files?: CreateFileData[];
   status?: OrderStatusType;
@@ -177,25 +198,36 @@ export interface UpdateOrderData {
 }
 
 export class OrderService {
-  async createOrder(data: CreateOrderData) {
-    // Validate that orderProducts is not empty
-    if (!data.orderProducts || !Array.isArray(data.orderProducts) || data.orderProducts.length === 0) {
-      throw new Error('Order must have at least one product');
-    }
-    
-    // Validate each product has all required fields
-    for (const product of data.orderProducts) {
-      if (!product.productId || !product.shadeType || 
-          !product.finishingInstructions || 
-          product.componentDetails === undefined || product.componentDetails === null ||
-          !product.incaseOfAllAbutments || !product.occlusalStaining || !product.ponticDesign || 
-          !product.repeatCorrections || !product.enterReason) {
-        throw new Error('Each order product must have all required fields: productId, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason');
+  async createOrder(data: CreateOrderData, actorUserId?: string) {
+    const isCancelled = isCancelledOrderStatus(data.status);
+    const products = data.orderProducts ?? [];
+
+    if (!isCancelled) {
+      if (!Array.isArray(products) || products.length === 0) {
+        throw new Error('Order must have at least one product');
+      }
+
+      for (const product of products) {
+        if (!product.productId || !product.shadeType ||
+            !product.finishingInstructions ||
+            product.componentDetails === undefined || product.componentDetails === null ||
+            !product.incaseOfAllAbutments || !product.occlusalStaining || !product.ponticDesign ||
+            !product.repeatCorrections || !product.enterReason) {
+          throw new Error('Each order product must have all required fields: productId, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason');
+        }
       }
     }
     
-    // Generate formatted order ID (e.g., ODLUXDDMMYY01)
-    const orderId = await this.generateOrderId();
+    // Use sheet-provided order id when present; otherwise generate ODLUX… id
+    let orderId = data.id?.trim();
+    if (orderId) {
+      const existing = await prisma.order.findUnique({ where: { id: orderId }, select: { id: true } });
+      if (existing) {
+        throw new Error(`Order ID '${orderId}' already exists`);
+      }
+    } else {
+      orderId = await this.generateOrderId();
+    }
 
     // Lookup doctor name for denormalized storage (if doctorId provided)
     let doctor = null;
@@ -207,24 +239,19 @@ export class OrderService {
     }
     
     // Create or find patient
-    // First, try to find existing patient by name, age, and gender
+    const patientData = normalizePatientData(data.patient);
     let patient = await prisma.patient.findFirst({
       where: {
-        name: data.patient.name,
-        age: data.patient.age,
-        gender: data.patient.gender,
+        name: patientData.name,
+        age: patientData.age,
+        gender: patientData.gender,
       },
     });
 
     // If patient doesn't exist, create a new one
     if (!patient) {
       patient = await prisma.patient.create({
-        data: {
-          name: data.patient.name,
-          age: data.patient.age,
-          gender: data.patient.gender,
-          contactNumber: data.patient.contactNumber,
-        },
+        data: { ...patientData, ...createUserStampFields(actorUserId) },
       });
     }
 
@@ -238,7 +265,7 @@ export class OrderService {
     const order = await prisma.order.create({
       data: {
         id: orderId,
-        invoiceNumber: data.invoiceNumber,
+        invoiceNumber: data.invoiceNumber?.trim() || orderId,
         patientId: patient.id,
         doctorId: data.doctorId || null,
         doctorName: doctor?.name || null,
@@ -247,9 +274,15 @@ export class OrderService {
         referredDoctorId: data.referredDoctorId,
         partner: data.partner,
         estimateDate: data.estimateDate,
+        scanningMode: data.scanningMode ?? null,
+        schedule: data.schedule ?? null,
+        enterRemark: data.enterRemark ?? null,
+        dateOfApproach: data.dateOfApproach ?? null,
         status: data.status || 'NEW',
-        orderProducts: {
-          create: data.orderProducts.map((product) => {
+        ...createUserStampFields(actorUserId),
+        orderProducts: products.length
+          ? {
+          create: products.map((product) => {
             const prod = catalogById.get(product.productId)!;
             const { unitPrice, discountPercent } = resolveLinePricing(
               { unitPrice: product.unitPrice, discountPercent: product.discountPercent },
@@ -282,7 +315,8 @@ export class OrderService {
 
             return productData;
           }),
-        },
+        }
+          : undefined,
         files: data.files ? {
           create: data.files.map(file => ({
             fileName: file.fileName,
@@ -329,6 +363,7 @@ export class OrderService {
           },
         },
         files: true,
+        ...userStampInclude,
       },
     } as any) as any;
 
@@ -337,7 +372,7 @@ export class OrderService {
       orderId: order.id,
       fromState: undefined,
       toState: order.status || 'NEW',
-      transitionedBy: undefined, // System-generated
+      transitionedBy: actorUserId,
       remarks: 'Order created',
     });
 
@@ -386,6 +421,7 @@ export class OrderService {
         transitions: {
           orderBy: { transitionOrder: 'asc' },
         },
+        ...userStampInclude,
       },
     });
 
@@ -784,29 +820,24 @@ export class OrderService {
     // Handle patient update if provided
     let patientId = data.patientId;
     if (data.patient) {
-      // Find or create patient (same logic as createOrder)
+      const patientData = normalizePatientData(data.patient);
       let patient = await prisma.patient.findFirst({
         where: {
-          name: data.patient.name,
-          age: data.patient.age,
-          gender: data.patient.gender,
+          name: patientData.name,
+          age: patientData.age,
+          gender: patientData.gender,
         },
       });
 
       if (!patient) {
         patient = await prisma.patient.create({
-          data: {
-            name: data.patient.name,
-            age: data.patient.age,
-            gender: data.patient.gender,
-            contactNumber: data.patient.contactNumber,
-          },
+          data: { ...patientData, ...createUserStampFields(transitionedBy) },
         });
       } else if (data.patient.contactNumber !== undefined) {
         // Update contact number if provided
         patient = await prisma.patient.update({
           where: { id: patient.id },
-          data: { contactNumber: data.patient.contactNumber },
+          data: { contactNumber: data.patient.contactNumber, ...updateUserStampFields(transitionedBy) },
         });
       }
       patientId = patient.id;
@@ -838,9 +869,19 @@ export class OrderService {
     if (data.estimateDate !== undefined) updateData.estimateDate = data.estimateDate;
     if (data.dateOfApproach !== undefined) updateData.dateOfApproach = data.dateOfApproach || null;
     if (data.status !== undefined) updateData.status = data.status;
+    Object.assign(updateData, updateUserStampFields(transitionedBy));
 
     // Handle orderProducts update if provided
     if (data.orderProducts !== undefined) {
+      const effectiveStatus = data.status ?? currentOrder.status;
+      const isCancelled = isCancelledOrderStatus(effectiveStatus);
+
+      if (data.orderProducts.length === 0) {
+        if (!isCancelled) {
+          throw new Error('Order must have at least one product');
+        }
+        await prisma.orderProduct.deleteMany({ where: { orderId: id } });
+      } else {
       const productIds = [...new Set(data.orderProducts.map((p) => p.productId))];
       const catalogRows = await prisma.product.findMany({ where: { id: { in: productIds } } });
       if (catalogRows.length !== productIds.length) {
@@ -945,6 +986,7 @@ export class OrderService {
           }),
         };
       }
+      }
     }
 
     // Handle files update if provided
@@ -1041,6 +1083,7 @@ export class OrderService {
           },
         },
         files: true,
+        ...userStampInclude,
       },
     });
 

@@ -8,6 +8,7 @@ import { betterAuthForgotPassword } from './betterauth.service';
 
 export interface LoginPayload {
   id: string;
+  email?: string;
   role: Role;
   employeeType?: EmployeeType | null;
   technicianGroup?: TechnicianGroup | null;

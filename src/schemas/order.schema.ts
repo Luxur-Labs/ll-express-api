@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isCancelledOrderStatus } from '../utils/orderStatus';
 
 // All available order statuses (department stages + lifecycle)
 // Departments: MODEL, CAD, CAM, DMLS
@@ -84,16 +85,26 @@ const updateFileSchema = fileSchema.extend({
 const patientDataSchema = z.object({
   name: stringSchema('Patient name is required', 255),
   age: z.preprocess(
-    (val) => val === null ? undefined : (typeof val === 'string' ? parseInt(val, 10) : val),
-    z.number().int('Age must be an integer').min(0, 'Age cannot be negative').max(150, 'Age cannot exceed 150')
+    (val) => {
+      if (val === null || val === undefined || val === '') return undefined;
+      return typeof val === 'string' ? parseInt(val, 10) : val;
+    },
+    z.number().int('Age must be an integer').min(0, 'Age cannot be negative').max(150, 'Age cannot exceed 150').optional()
   ),
-  gender: stringSchema('Gender is required', 50),
+  gender: z.preprocess(
+    (val) => (val === null || val === undefined ? undefined : val),
+    z.string().max(50, 'Gender too long').optional()
+  ),
   contactNumber: z.preprocess((val) => val === null ? undefined : val, z.string().max(20, 'Contact number too long').optional()),
 });
 
 export const createOrderSchema = z.object({
-  body: z.object({
-    invoiceNumber: stringSchema('Invoice number is required', 255),
+  body: z
+    .object({
+    invoiceNumber: z.preprocess(
+      (val) => (val === null || val === undefined || val === '' ? undefined : val),
+      z.string().max(255, 'Invoice number too long').optional()
+    ),
     patient: patientDataSchema, // Changed from patientId to patient object
     doctorId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
     clinicId: stringSchema('Clinic ID is required'),
@@ -101,10 +112,23 @@ export const createOrderSchema = z.object({
     referenceName: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Reference name too long').optional()),
     partner: stringSchema('Partner is required', 255),
     estimateDate: z.preprocess((val) => val === null ? undefined : val, z.string().datetime('Invalid estimate date format')),
-    orderProducts: z.array(orderProductSchema).min(1, 'At least one order product is required'),
+    orderProducts: z.preprocess(
+      (val) => (val === null || val === undefined ? [] : val),
+      z.array(orderProductSchema)
+    ),
     files: z.array(fileSchema).optional(),
     status: z.enum(ORDER_STATUSES).optional(),
-  }),
+  })
+    .superRefine((body, ctx) => {
+      if (isCancelledOrderStatus(body.status)) return;
+      if (!body.orderProducts.length) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'At least one order product is required',
+          path: ['orderProducts'],
+        });
+      }
+    }),
   query: z.object({}).optional(),
   params: z.object({}).optional(),
 });

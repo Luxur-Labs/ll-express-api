@@ -55,6 +55,7 @@ export async function loginController(req: Request, res: Response) {
 
     const token = signToken({
       id: user.id,
+      email: user.email,
       role: user.role as unknown as AuthRole,
       employeeType: (user.employeeType?.name as EmployeeType | undefined) ?? null,
       technicianGroup: (user.technicianGroup?.name as TechnicianGroup | undefined) ?? null,

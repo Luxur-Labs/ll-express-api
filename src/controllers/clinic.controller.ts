@@ -2,25 +2,28 @@ import { Request, Response } from 'express';
 import {
   ClinicService,
   CreateClinicData,
+  OrganizationIdConflictError,
+  OrganizationIdFormatError,
   PendingBalanceLockedError,
   UpdateClinicData,
 } from '../services/clinic.service';
+import { clinicImportService } from '../services/clinicImport.service';
+import { getActorUserId } from '../utils/requestUser';
 
 const clinicService = new ClinicService();
 
 export async function createClinicController(req: Request, res: Response) {
   try {
-    const { clinicName, organizationId, clientAddress, contactNumber, doctorName, pendingBalance } = req.body;
+    const { clinicName, clientAddress, contactNumber, doctorName, pendingBalance } = req.body;
 
-    if (!clinicName || !organizationId || !clientAddress || !contactNumber) {
+    if (!clinicName || !clientAddress || !contactNumber) {
       return res.status(400).json({
-        message: 'clinicName, organizationId, clientAddress, and contactNumber are required'
+        message: 'clinicName, clientAddress, and contactNumber are required'
       });
     }
 
     const clinicData: CreateClinicData = {
       clinicName,
-      organizationId,
       clientAddress,
       contactNumber,
       doctorName,
@@ -30,9 +33,12 @@ export async function createClinicController(req: Request, res: Response) {
           : undefined,
     };
 
-    const clinic = await clinicService.createClinic(clinicData);
+    const clinic = await clinicService.createClinic(clinicData, getActorUserId(res));
     return res.status(201).json(clinic);
   } catch (error) {
+    if (error instanceof OrganizationIdConflictError || error instanceof OrganizationIdFormatError) {
+      return res.status(409).json({ message: error.message });
+    }
     console.error('Error creating clinic:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
@@ -94,10 +100,13 @@ export async function updateClinicController(req: Request, res: Response) {
       updateData.pendingBalance = Number(pendingBalance) || 0;
     }
 
-    const updatedClinic = await clinicService.updateClinic(id, updateData);
+    const updatedClinic = await clinicService.updateClinic(id, updateData, getActorUserId(res));
     return res.json(updatedClinic);
   } catch (error) {
     if (error instanceof PendingBalanceLockedError) {
+      return res.status(409).json({ message: error.message });
+    }
+    if (error instanceof OrganizationIdConflictError || error instanceof OrganizationIdFormatError) {
       return res.status(409).json({ message: error.message });
     }
     console.error('Error updating clinic:', error);
@@ -119,7 +128,7 @@ export async function deleteClinicController(req: Request, res: Response) {
       return res.status(404).json({ message: 'Clinic not found' });
     }
 
-    await clinicService.deleteClinic(id);
+    await clinicService.deleteClinic(id, getActorUserId(res));
     return res.status(204).send();
   } catch (error) {
     console.error('Error deleting clinic:', error);
@@ -154,5 +163,27 @@ export async function getClinicsListController(req: Request, res: Response) {
   } catch (error) {
     console.error('Error fetching clinics list:', error);
     return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+export async function importClinicsFileController(req: Request, res: Response) {
+  try {
+    const file = req.file;
+    if (!file?.buffer?.length) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+    const result = await clinicImportService.importFromFile(
+      file.buffer,
+      file.originalname,
+      getActorUserId(res),
+    );
+    return res.status(200).json({
+      message: `Imported ${result.summary.created} created, ${result.summary.updated} updated`,
+      data: result,
+    });
+  } catch (error: unknown) {
+    console.error('Clinic import error:', error);
+    const message = error instanceof Error ? error.message : 'Clinic import failed';
+    return res.status(400).json({ message });
   }
 }

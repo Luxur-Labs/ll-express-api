@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
+import { authenticate, authorizePermissions, authorizeRoles } from '../middleware/auth.middleware';
+import { ADMIN_ROLES } from '../config/permissions';
 import {
   previewBillingInvoiceController,
   previewOrderInvoicePrintController,
@@ -25,28 +26,32 @@ import {
 
 const router = Router();
 
-router.use(authenticate);
-router.use(authorizeRoles('SUPER_ADMIN'));
+const adminRoles = [...ADMIN_ROLES] as Parameters<typeof authorizeRoles>;
 
-router.post('/invoices/preview', previewBillingInvoiceController);
-router.get('/orders/:orderId/invoice-print-preview', previewOrderInvoicePrintController);
-router.post('/invoices', finalizeBillingInvoiceController);
-router.get('/invoices/pending', listPendingInvoicesController);
-router.get('/invoices/:id', getBillingInvoiceController);
-router.post('/invoices/:id/cancel', cancelBillingInvoiceController);
-router.patch('/invoices/:id/payment', patchBillingInvoicePaymentController);
-router.post('/invoices/:id/payments/cash', recordCashPaymentOnInvoiceController);
-router.post('/invoices/:id/payments/line-amount', suggestLinePaymentAmountController);
-router.post('/invoices/:id/razorpay/order', createRazorpayInvoiceOrderController);
-router.post('/invoices/:id/razorpay/verify', verifyRazorpayInvoicePaymentController);
-router.get('/clinics/:clinicId/invoices/open', listOpenInvoicesForClinicController);
-router.post('/clinics/:clinicId/payments/cash', recordClinicMultiCashController);
-router.post('/clinics/:clinicId/razorpay/order', createRazorpayClinicOrderController);
-router.post('/clinics/:clinicId/razorpay/verify', verifyRazorpayClinicPaymentController);
-router.get('/summary', getBillingOverallSummaryController);
-router.get('/clinics/:clinicId/invoices/counts', getBillingClinicInvoiceCountsController);
-router.get('/clinics/:clinicId/invoices', listBillingInvoicesController);
-router.get('/clinics/:clinicId/ledger', getBillingLedgerController);
-router.get('/clinics/:clinicId/summary', getBillingClinicSummaryController);
+router.use(authenticate);
+
+// Preview & read — SUPER_ADMIN + FRONT_OFFICE
+router.post('/invoices/preview', authorizePermissions('billing.preview'), previewBillingInvoiceController);
+router.get('/orders/:orderId/invoice-print-preview', authorizePermissions('billing.preview'), previewOrderInvoicePrintController);
+router.get('/invoices/:id', authorizePermissions('billing.view'), getBillingInvoiceController);
+router.get('/clinics/:clinicId/invoices/counts', authorizePermissions('billing.view'), getBillingClinicInvoiceCountsController);
+router.get('/clinics/:clinicId/invoices', authorizePermissions('billing.view'), listBillingInvoicesController);
+
+// Full billing — SUPER_ADMIN only
+router.post('/invoices', authorizePermissions('billing.manage'), finalizeBillingInvoiceController);
+router.get('/invoices/pending', authorizePermissions('billing.manage'), listPendingInvoicesController);
+router.post('/invoices/:id/cancel', authorizePermissions('billing.manage'), cancelBillingInvoiceController);
+router.patch('/invoices/:id/payment', authorizePermissions('billing.payments'), patchBillingInvoicePaymentController);
+router.post('/invoices/:id/payments/cash', authorizePermissions('billing.payments'), recordCashPaymentOnInvoiceController);
+router.post('/invoices/:id/payments/line-amount', authorizePermissions('billing.payments'), suggestLinePaymentAmountController);
+router.post('/invoices/:id/razorpay/order', authorizePermissions('billing.payments'), createRazorpayInvoiceOrderController);
+router.post('/invoices/:id/razorpay/verify', authorizePermissions('billing.payments'), verifyRazorpayInvoicePaymentController);
+router.get('/clinics/:clinicId/invoices/open', authorizePermissions('billing.manage'), listOpenInvoicesForClinicController);
+router.post('/clinics/:clinicId/payments/cash', authorizePermissions('billing.payments'), recordClinicMultiCashController);
+router.post('/clinics/:clinicId/razorpay/order', authorizePermissions('billing.payments'), createRazorpayClinicOrderController);
+router.post('/clinics/:clinicId/razorpay/verify', authorizePermissions('billing.payments'), verifyRazorpayClinicPaymentController);
+router.get('/summary', authorizePermissions('dashboard.billing'), getBillingOverallSummaryController);
+router.get('/clinics/:clinicId/ledger', authorizePermissions('billing.manage'), getBillingLedgerController);
+router.get('/clinics/:clinicId/summary', authorizePermissions('billing.manage'), getBillingClinicSummaryController);
 
 export default router;

@@ -17,7 +17,7 @@ export const updateUserSchema = z.object({
   body: z.object({
     email: z.string().email('invalid email format').transform(s => s.trim().toLowerCase()).optional(),
     password: z.string().min(1, 'password is required').optional(),
-    role: z.enum(['SUPER_ADMIN', 'DOCTOR', 'EMPLOYEE']).optional(),
+    role: z.enum(['SUPER_ADMIN', 'LAB_MANAGER', 'FRONT_OFFICE', 'DOCTOR', 'EMPLOYEE']).optional(),
     employeeTypeName: z.string().nullable().optional(),
     technicianGroupName: z.string().nullable().optional(),
     name: z.string().max(255, 'Name too long').optional().transform(val => val === '' ? null : val),

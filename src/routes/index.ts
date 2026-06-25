@@ -4,6 +4,7 @@ import { healthController } from '../controllers/health.controller';
 import { getDoctorsListController } from '../controllers/user.controller';
 import { getDashboardController } from '../controllers/dashboard.controller';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
+import { ADMIN_ROLES } from '../config/permissions';
 
 import clinicRoutes from './clinic.routes';
 import productRoutes from './product.routes';
@@ -18,10 +19,12 @@ import orderStatusRoutes from './orderStatus.routes';
  
 const router = Router();
  
+const adminRoles = [...ADMIN_ROLES] as Parameters<typeof authorizeRoles>;
+
 router.get('/health', healthController); 
 
-// Dashboard (SUPER_ADMIN only)
-router.get('/dashboard', authenticate, authorizeRoles('SUPER_ADMIN'), getDashboardController);
+// Dashboard — all admin profiles
+router.get('/dashboard', authenticate, authorizeRoles(...adminRoles), getDashboardController);
 
 // Auth routes
 router.use('/auth', authRoutes);
@@ -36,8 +39,8 @@ router.use('/order-status', orderStatusRoutes);
 // User routes
 router.use('/users', userRoutes);
 
-// Doctors (SUPER_ADMIN) - kept in main routes as requested
-router.get('/doctors/list', authenticate, authorizeRoles('SUPER_ADMIN'), getDoctorsListController);
+// Doctors list — admin profiles (order forms)
+router.get('/doctors/list', authenticate, authorizeRoles(...adminRoles), getDoctorsListController);
 
 // Other entity routes
 router.use('/clinics', clinicRoutes);

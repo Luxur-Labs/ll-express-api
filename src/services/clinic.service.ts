@@ -1,5 +1,6 @@
 import { prisma } from '../utils/prisma';
 import { Prisma } from '@prisma/client';
+import { createUserStampFields, updateUserStampFields, userStampInclude } from '../utils/userStamps';
 
 export class PendingBalanceLockedError extends Error {
   constructor() {
@@ -7,6 +8,22 @@ export class PendingBalanceLockedError extends Error {
       'Pending balance cannot be changed after an invoice has been generated for this clinic.',
     );
     this.name = 'PendingBalanceLockedError';
+  }
+}
+
+export class OrganizationIdConflictError extends Error {
+  constructor(requested: string, existing: string) {
+    super(
+      `Organization number ${requested} is already used by ${existing}. Choose the next available number.`,
+    );
+    this.name = 'OrganizationIdConflictError';
+  }
+}
+
+export class OrganizationIdFormatError extends Error {
+  constructor() {
+    super('Organization ID must look like ORG-1 (ORG- prefix with a numeric suffix, no leading zeros).');
+    this.name = 'OrganizationIdFormatError';
   }
 }
 
@@ -19,7 +36,6 @@ function withHasInvoices<T extends { _count: { billingInvoices: number } }>(
 
 export interface CreateClinicData {
   clinicName: string;
-  organizationId: string;
   clientAddress: string;
   contactNumber: string;
   doctorName?: string;
@@ -36,13 +52,16 @@ export interface UpdateClinicData {
 }
 
 export class ClinicService {
-  async createClinic(data: CreateClinicData) {
-    const createData: any = { ...data };
+  async createClinic(data: CreateClinicData, actorUserId?: string) {
+    const organizationId = await getNextOrganizationId();
+    await assertOrganizationNumberAvailable(organizationId);
+    const createData: any = { ...data, organizationId, ...createUserStampFields(actorUserId) };
     if (data.pendingBalance !== undefined && data.pendingBalance !== null) {
       createData.pendingBalance = new Prisma.Decimal(Number(data.pendingBalance) || 0);
     }
     const created = await prisma.clinic.create({
       data: createData,
+      include: userStampInclude,
     });
     return { ...created, hasInvoices: false as const };
   }
@@ -52,6 +71,7 @@ export class ClinicService {
       where: { id, isActive: true },
       include: {
         _count: { select: { billingInvoices: true } },
+        ...userStampInclude,
       },
     });
     if (!row) return null;
@@ -64,25 +84,32 @@ export class ClinicService {
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { billingInvoices: true } },
+        ...userStampInclude,
       },
     });
     return rows.map((row) => withHasInvoices(row));
   }
 
-  async updateClinic(id: string, data: UpdateClinicData) {
+  async updateClinic(id: string, data: UpdateClinicData, actorUserId?: string) {
     if (data.pendingBalance !== undefined && data.pendingBalance !== null) {
       const invoiceCount = await prisma.billingInvoice.count({ where: { clinicId: id } });
       if (invoiceCount > 0) {
         throw new PendingBalanceLockedError();
       }
     }
-    const updateData: any = { ...data };
+    const updateData: any = { ...data, ...updateUserStampFields(actorUserId) };
+    if (data.organizationId !== undefined) {
+      const normalized = normalizeOrganizationId(String(data.organizationId));
+      await assertOrganizationNumberAvailable(normalized, id);
+      updateData.organizationId = normalized;
+    }
     if (data.pendingBalance !== undefined && data.pendingBalance !== null) {
       updateData.pendingBalance = new Prisma.Decimal(Number(data.pendingBalance) || 0);
     }
     const updated = await prisma.clinic.update({
       where: { id },
       data: updateData,
+      include: userStampInclude,
     });
     const invoiceCount = await prisma.billingInvoice.count({ where: { clinicId: id } });
     return { ...updated, hasInvoices: invoiceCount > 0 };
@@ -94,6 +121,7 @@ export class ClinicService {
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { billingInvoices: true } },
+        ...userStampInclude,
       },
     });
     return rows.map((row) => withHasInvoices(row));
@@ -138,6 +166,10 @@ export class ClinicService {
         organizationId: true,
         doctorName: true,
         pendingBalance: true,
+        createdAt: true,
+        updatedAt: true,
+        createdBy: userStampInclude.createdBy,
+        updatedBy: userStampInclude.updatedBy,
         _count: { select: { billingInvoices: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -160,10 +192,73 @@ export class ClinicService {
   /**
    * Soft delete a clinic (set isActive to false)
    */
-  async deleteClinic(id: string) {
+  async deleteClinic(id: string, actorUserId?: string) {
     return await prisma.clinic.update({
       where: { id },
-      data: { isActive: false },
+      data: { isActive: false, ...updateUserStampFields(actorUserId) },
     });
   }
+}
+
+function parseOrgNumber(orgId: string): number | null {
+  const match = /^ORG-(\d+)$/i.exec(orgId.trim());
+  return match ? parseInt(match[1], 10) : null;
+}
+
+/** Canonical format: ORG-1, ORG-571, etc. (no leading zeros). */
+export function formatOrganizationId(n: number): string {
+  if (!Number.isFinite(n) || n < 1) {
+    throw new OrganizationIdFormatError();
+  }
+  return `ORG-${n}`;
+}
+
+export function normalizeOrganizationId(orgId: string): string {
+  const n = parseOrgNumber(orgId);
+  if (n === null) {
+    throw new OrganizationIdFormatError();
+  }
+  return formatOrganizationId(n);
+}
+
+async function loadUsedOrganizationNumbers(excludeClinicId?: string): Promise<Set<number>> {
+  const clinics = await prisma.clinic.findMany({
+    where: excludeClinicId ? { id: { not: excludeClinicId } } : undefined,
+    select: { organizationId: true },
+  });
+  const used = new Set<number>();
+  for (const c of clinics) {
+    const n = parseOrgNumber(c.organizationId);
+    if (n !== null && n > 0) used.add(n);
+  }
+  return used;
+}
+
+export async function assertOrganizationNumberAvailable(
+  orgId: string,
+  excludeClinicId?: string,
+): Promise<void> {
+  const requested = normalizeOrganizationId(orgId);
+  const n = parseOrgNumber(requested);
+  if (n === null) throw new OrganizationIdFormatError();
+
+  const rows = await prisma.clinic.findMany({
+    where: excludeClinicId ? { id: { not: excludeClinicId } } : undefined,
+    select: { organizationId: true },
+  });
+  for (const row of rows) {
+    const existingNum = parseOrgNumber(row.organizationId);
+    if (existingNum === n) {
+      throw new OrganizationIdConflictError(requested, row.organizationId);
+    }
+  }
+}
+
+export async function getNextOrganizationId(): Promise<string> {
+  const usedNumbers = await loadUsedOrganizationNumbers();
+  let candidate = usedNumbers.size > 0 ? Math.max(...usedNumbers) + 1 : 1;
+  while (usedNumbers.has(candidate)) {
+    candidate += 1;
+  }
+  return formatOrganizationId(candidate);
 }

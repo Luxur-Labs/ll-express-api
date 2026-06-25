@@ -1,4 +1,5 @@
 import { prisma } from '../utils/prisma';
+import { createUserStampFields, updateUserStampFields, userStampInclude } from '../utils/userStamps';
 
 export interface CreatePatientData {
   name: string;
@@ -15,28 +16,32 @@ export interface UpdatePatientData {
 }
 
 export class PatientService {
-  async createPatient(data: CreatePatientData) {
+  async createPatient(data: CreatePatientData, actorUserId?: string) {
     return await prisma.patient.create({
-      data,
+      data: { ...data, ...createUserStampFields(actorUserId) },
+      include: userStampInclude,
     });
   }
 
   async getPatientById(id: string) {
     return await prisma.patient.findUnique({
       where: { id },
+      include: userStampInclude,
     });
   }
 
   async getAllPatients() {
     return await prisma.patient.findMany({
       orderBy: { createdAt: 'desc' },
+      include: userStampInclude,
     });
   }
 
-  async updatePatient(id: string, data: UpdatePatientData) {
+  async updatePatient(id: string, data: UpdatePatientData, actorUserId?: string) {
     return await prisma.patient.update({
       where: { id },
-      data,
+      data: { ...data, ...updateUserStampFields(actorUserId) },
+      include: userStampInclude,
     });
   }
 

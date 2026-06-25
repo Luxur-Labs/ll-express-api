@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
+import { authenticate, authorizePermissions, authorizeRoles } from '../middleware/auth.middleware';
+import { ADMIN_ROLES } from '../config/permissions';
 import {
   assignOrderToTechnicianGroupController,
   getOrderAssignmentsController,
@@ -12,30 +13,16 @@ import {
 
 const router = Router();
 
-// All routes require authentication and SUPER_ADMIN role
+const adminRoles = [...ADMIN_ROLES] as Parameters<typeof authorizeRoles>;
+
 router.use(authenticate);
-router.use(authorizeRoles('SUPER_ADMIN'));
 
-// Assign order to technician group
-router.post('/assign', assignOrderToTechnicianGroupController);
-
-// Get assignments for a specific order
-router.get('/order/:orderId', getOrderAssignmentsController);
-
-// Get orders assigned to a specific technician group
-router.get('/technician-group/:technicianGroupId/orders', getTechnicianGroupOrdersController);
-
-// Update an assignment
-router.put('/assignment/:assignmentId', updateAssignmentController);
-
-// Remove a specific assignment
-router.delete('/assignment/:assignmentId', removeAssignmentController);
-
-// Remove all assignments for an order
-router.delete('/order/:orderId/all', removeAllOrderAssignmentsController);
-
-// Get assignment statistics
-router.get('/stats', getAssignmentStatsController);
+router.post('/assign', authorizePermissions('orders.assign'), assignOrderToTechnicianGroupController);
+router.get('/order/:orderId', authorizeRoles(...adminRoles), getOrderAssignmentsController);
+router.get('/technician-group/:technicianGroupId/orders', authorizeRoles(...adminRoles), getTechnicianGroupOrdersController);
+router.put('/assignment/:assignmentId', authorizePermissions('orders.assign'), updateAssignmentController);
+router.delete('/assignment/:assignmentId', authorizePermissions('orders.assign'), removeAssignmentController);
+router.delete('/order/:orderId/all', authorizePermissions('orders.assign'), removeAllOrderAssignmentsController);
+router.get('/stats', authorizeRoles('SUPER_ADMIN', 'LAB_MANAGER'), getAssignmentStatsController);
 
 export default router;
-

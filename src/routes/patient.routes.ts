@@ -11,25 +11,26 @@ import {
   searchPatientsByNameController,
   getPatientsListController,
 } from '../controllers/patient.controller';
-import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
+import { authenticate, authorizePermissions, authorizeRoles } from '../middleware/auth.middleware';
+import { ADMIN_ROLES } from '../config/permissions';
 import { validate } from '../middleware/validate.middleware';
 import { createPatientSchema, updatePatientSchema, ageRangeQuerySchema, searchByNameQuerySchema } from '../schemas/patient.schema';
 
 const router = Router();
 
-// All patient routes require SUPER_ADMIN role
-router.use(authenticate);
-router.use(authorizeRoles('SUPER_ADMIN'));
+const adminRoles = [...ADMIN_ROLES] as Parameters<typeof authorizeRoles>;
 
-// CRUD operations for patients
-router.post('/', validate(createPatientSchema), createPatientController);
-router.get('/', getAllPatientsController);
-router.get('/list', getPatientsListController);
-router.get('/search', validate(searchByNameQuerySchema), searchPatientsByNameController);
-router.get('/gender/:gender', getPatientsByGenderController);
-router.get('/age-range', validate(ageRangeQuerySchema), getPatientsByAgeRangeController);
-router.get('/:id', getPatientByIdController);
-router.put('/:id', validate(updatePatientSchema), updatePatientController);
-router.delete('/:id', deletePatientController);
+router.use(authenticate);
+
+router.get('/', authorizeRoles(...adminRoles), getAllPatientsController);
+router.get('/list', authorizeRoles(...adminRoles), getPatientsListController);
+router.get('/search', authorizeRoles(...adminRoles), validate(searchByNameQuerySchema), searchPatientsByNameController);
+router.get('/gender/:gender', authorizeRoles(...adminRoles), getPatientsByGenderController);
+router.get('/age-range', authorizeRoles(...adminRoles), validate(ageRangeQuerySchema), getPatientsByAgeRangeController);
+router.get('/:id', authorizeRoles(...adminRoles), getPatientByIdController);
+
+router.post('/', authorizePermissions('orders.create'), validate(createPatientSchema), createPatientController);
+router.put('/:id', authorizePermissions('orders.update'), validate(updatePatientSchema), updatePatientController);
+router.delete('/:id', authorizePermissions('orders.delete'), deletePatientController);
 
 export default router;

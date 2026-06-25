@@ -1,6 +1,7 @@
 import { Prisma, BillingPeriodType, BillingLedgerEntryType } from '@prisma/client';
 import { prisma } from '../utils/prisma';
 import { razorpayService } from './razorpay.service';
+import { countToothUnits } from '../utils/toothNumber.util';
 
 export const COMPANY_HEADER = {
   name: 'Izee Medical Laboratories Pvt Ltd',
@@ -17,10 +18,7 @@ function toNumber(d: Prisma.Decimal | number | null | undefined): number {
 }
 
 export function countUnits(unitNumbers?: string | null): number {
-  if (!unitNumbers?.trim()) return 1;
-  const nums = unitNumbers.match(/\d+/g);
-  if (nums && nums.length > 0) return nums.length;
-  return 1;
+  return countToothUnits(unitNumbers);
 }
 
 export function roundMoney(n: number): number {
@@ -152,7 +150,16 @@ export class BillingService {
     );
   }
 
-  /** Opening balance (clinic pending) is rolled into the total only on the first non-cancelled invoice. */
+  /** Opening balance (clinic pending) is rolled into the total only on the first non-cancelled invoice, and only when it is greater than zero. */
+  private resolvePreviousBalanceForInvoice(
+    isFirst: boolean,
+    clinicPendingBalance: number
+  ): number {
+    if (!isFirst) return 0;
+    const opening = roundMoney(clinicPendingBalance);
+    return opening > 0 ? opening : 0;
+  }
+
   private async isFirstNonCancelledInvoiceForClinic(
     clinicId: string,
     tx?: Prisma.TransactionClient
@@ -238,7 +245,8 @@ export class BillingService {
     }
     const invoiceSubtotal = roundMoney(lines.reduce((s, l) => s + l.lineTotal, 0));
     const isFirst = await this.isFirstNonCancelledInvoiceForClinic(clinicId);
-    const previousBalance = isFirst ? roundMoney(toNumber(clinic.pendingBalance)) : 0;
+    const clinicPending = roundMoney(toNumber(clinic.pendingBalance));
+    const previousBalance = this.resolvePreviousBalanceForInvoice(isFirst, clinicPending);
     const roundOff = 0;
     const totalPayable = roundMoney(invoiceSubtotal + roundOff + previousBalance);
     const receivedAmount = 0;
@@ -268,6 +276,7 @@ export class BillingService {
       creditsAdjusted,
       netPayable,
       totalInWords: numberToWords(netPayable),
+      isFirstInvoice: isFirst,
     };
   }
 
@@ -401,7 +410,7 @@ export class BillingService {
       const invoiceSubtotal = roundMoney(lines.reduce((s, l) => s + l.lineTotal, 0));
       const isFirst = await this.isFirstNonCancelledInvoiceForClinic(clinicId, tx);
       const currentPending = roundMoney(toNumber(clinic.pendingBalance));
-      const previousBalance = isFirst ? currentPending : 0;
+      const previousBalance = this.resolvePreviousBalanceForInvoice(isFirst, currentPending);
       const totalPayable = roundMoney(invoiceSubtotal + roundOff + previousBalance);
       const recv = roundMoney(Math.max(0, receivedAmount));
       const cred = roundMoney(Math.max(0, creditsAdjusted));
@@ -483,7 +492,7 @@ export class BillingService {
         });
       }
 
-      // Carry forward: first invoice can include prior opening in totals; follow-ups add only new charges.
+      // Carry forward: first invoice may include opening balance (> 0 only); later invoices bill new charges only.
       const newPending = roundMoney(currentPending - recv - cred + invoiceSubtotal + roundOff);
       await tx.clinic.update({
         where: { id: clinicId },

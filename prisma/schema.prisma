@@ -9,6 +9,8 @@ datasource db {
 
 enum Role {
   SUPER_ADMIN
+  LAB_MANAGER
+  FRONT_OFFICE
   DOCTOR
   EMPLOYEE
 }
@@ -41,6 +43,14 @@ model User {
   // Relations
   ordersAsDoctor        Order[]           @relation("OrderDoctor")
   ordersAsReferredDoctor Order[]          @relation("OrderReferredDoctor")
+  clinicsCreated        Clinic[]          @relation("ClinicCreatedBy")
+  clinicsUpdated        Clinic[]          @relation("ClinicUpdatedBy")
+  productsCreated       Product[]         @relation("ProductCreatedBy")
+  productsUpdated       Product[]         @relation("ProductUpdatedBy")
+  patientsCreated       Patient[]         @relation("PatientCreatedBy")
+  patientsUpdated       Patient[]         @relation("PatientUpdatedBy")
+  ordersCreated         Order[]           @relation("OrderCreatedBy")
+  ordersUpdated         Order[]           @relation("OrderUpdatedBy")
   
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
@@ -77,6 +87,10 @@ model Clinic {
   orders          Order[]
   billingInvoices BillingInvoice[]
   billingLedger   BillingLedgerEntry[]
+  createdById     String?
+  updatedById     String?
+  createdBy       User?    @relation("ClinicCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy       User?    @relation("ClinicUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -165,11 +179,16 @@ model Product {
   name        String
   code        String?
   warranty    String?
+  onPaperRate Decimal? @db.Decimal(10, 2)
   price       Decimal  @db.Decimal(10, 2)
   discount    Decimal  @db.Decimal(5, 2) @default(0)
   
   // Relations
   orderProducts OrderProduct[]
+  createdById   String?
+  updatedById   String?
+  createdBy     User?    @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy     User?    @relation("ProductUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -184,6 +203,10 @@ model Patient {
   
   // Relations
   orders        Order[]
+  createdById   String?
+  updatedById   String?
+  createdBy     User?    @relation("PatientCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy     User?    @relation("PatientUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -223,6 +246,10 @@ model Order {
   files           File[]
   technicianGroups OrderTechnicianGroup[]
   transitions     OrderTransition[]
+  createdById     String?
+  updatedById     String?
+  createdBy       User?    @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy       User?    @relation("OrderUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -335,6 +362,36 @@ model File {
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+/// Tracks each sheet upload / import run by admin.
+model OrderImportBatch {
+  id              String               @id @default(uuid())
+  fileName        String?
+  importedByEmail String?
+  totalRows       Int                  @default(0)
+  ordersAttempted Int                  @default(0)
+  createdCount    Int                  @default(0)
+  failedCount     Int                  @default(0)
+  items           OrderImportBatchItem[]
+  createdAt       DateTime             @default(now())
+}
+
+model OrderImportBatchItem {
+  id           String           @id @default(uuid())
+  batchId      String
+  batch        OrderImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  orderId      String
+  status       String
+  patientName  String?
+  clinicName   String?
+  productCount Int              @default(1)
+  errorMessage String?
+  draftJson    Json?
+  createdAt    DateTime         @default(now())
+
+  @@index([batchId])
+  @@index([orderId])
 }
 
 

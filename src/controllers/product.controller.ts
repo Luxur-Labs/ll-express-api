@@ -1,11 +1,13 @@
 import { Request, Response } from 'express';
 import { ProductService, CreateProductData, UpdateProductData } from '../services/product.service';
+import { productImportService } from '../services/productImport.service';
+import { getActorUserId } from '../utils/requestUser';
 
 const productService = new ProductService();
 
 export async function createProductController(req: Request, res: Response) {
   try {
-    const { name, code, warranty, price, discount } = req.body;
+    const { name, code, warranty, onPaperRate, price, discount } = req.body;
 
     if (!name || price === undefined) {
       return res.status(400).json({
@@ -29,11 +31,12 @@ export async function createProductController(req: Request, res: Response) {
       name,
       code,
       warranty,
+      onPaperRate,
       price,
       discount,
     };
 
-    const createdProduct = await productService.createProduct(productData);
+    const createdProduct = await productService.createProduct(productData, getActorUserId(res));
     return res.status(201).json(createdProduct);
   } catch (error) {
     console.error('Error creating product:', error);
@@ -75,7 +78,7 @@ export async function getAllProductsController(req: Request, res: Response) {
 export async function updateProductController(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const { name, code, warranty, price, discount } = req.body;
+    const { name, code, warranty, onPaperRate, price, discount } = req.body;
 
     if (!id) {
       return res.status(400).json({ message: 'Product ID is required' });
@@ -105,10 +108,11 @@ export async function updateProductController(req: Request, res: Response) {
     if (name !== undefined) updateData.name = name;
     if (code !== undefined) updateData.code = code;
     if (warranty !== undefined) updateData.warranty = warranty;
+    if (onPaperRate !== undefined) updateData.onPaperRate = onPaperRate;
     if (price !== undefined) updateData.price = price;
     if (discount !== undefined) updateData.discount = discount;
 
-    const updatedProduct = await productService.updateProduct(id, updateData);
+    const updatedProduct = await productService.updateProduct(id, updateData, getActorUserId(res));
     return res.json(updatedProduct);
   } catch (error) {
     console.error('Error updating product:', error);
@@ -174,5 +178,27 @@ export async function getProductsListController(req: Request, res: Response) {
   } catch (error) {
     console.error('Error fetching products list:', error);
     return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+export async function importProductsFileController(req: Request, res: Response) {
+  try {
+    const file = req.file;
+    if (!file?.buffer?.length) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+    const result = await productImportService.importFromFile(
+      file.buffer,
+      file.originalname,
+      getActorUserId(res),
+    );
+    return res.status(200).json({
+      message: `Imported ${result.summary.created} created, ${result.summary.updated} updated`,
+      data: result,
+    });
+  } catch (error: unknown) {
+    console.error('Product import error:', error);
+    const message = error instanceof Error ? error.message : 'Product import failed';
+    return res.status(400).json({ message });
   }
 }

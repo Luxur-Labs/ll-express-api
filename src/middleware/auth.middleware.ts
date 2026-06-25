@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 
 import { verifyToken } from '../services/auth.service';
 import { Role, EmployeeType, TechnicianGroup, AuthUser } from '../types/auth';
+import { hasAnyPermission, Permission } from '../config/permissions';
 
 export function authenticate(req: Request, res: Response, next: NextFunction) {
   let token: string | undefined;
@@ -34,6 +35,17 @@ export function authorizeRoles(...allowed: Role[]) {
     const user = res.locals.user as AuthUser | undefined;
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
     if (!allowed.includes(user.role)) return res.status(403).json({ message: 'Forbidden' });
+    next();
+  };
+}
+
+export function authorizePermissions(...permissions: Permission[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const user = res.locals.user as AuthUser | undefined;
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    if (!hasAnyPermission(user.role, permissions)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
     next();
   };
 }

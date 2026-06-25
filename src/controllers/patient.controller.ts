@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PatientService, CreatePatientData, UpdatePatientData } from '../services/patient.service';
+import { getActorUserId } from '../utils/requestUser';
 
 const patientService = new PatientService();
 
@@ -26,7 +27,7 @@ export async function createPatientController(req: Request, res: Response) {
       contactNumber,
     };
 
-    await patientService.createPatient(patientData);
+    await patientService.createPatient(patientData, getActorUserId(res));
     return res.status(201).json({ message: 'Patient created successfully' });
   } catch (error) {
     console.error('Error creating patient:', error);
@@ -93,7 +94,7 @@ export async function updatePatientController(req: Request, res: Response) {
     if (gender !== undefined) updateData.gender = gender;
     if (contactNumber !== undefined) updateData.contactNumber = contactNumber;
 
-    const updatedPatient = await patientService.updatePatient(id, updateData);
+    const updatedPatient = await patientService.updatePatient(id, updateData, getActorUserId(res));
     return res.json(updatedPatient);
   } catch (error) {
     console.error('Error updating patient:', error);

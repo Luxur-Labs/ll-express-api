@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
 
 import { OrderService, CreateOrderData, UpdateOrderData } from '../services/order.service';
+import { canChangeOrderStatus } from '../config/permissions';
 import type { AuthUser } from '../types/auth';
+import { getActorUserId } from '../utils/requestUser';
+import { isCancelledOrderStatus } from '../utils/orderStatus';
 
 const orderService = new OrderService();
 
@@ -21,23 +24,44 @@ export async function createOrderController(req: Request, res: Response) {
       status
     } = req.body;
 
-    if (!invoiceNumber || !patient || !clinicId || !partner || 
-        !estimateDate || 
-        !orderProducts || !Array.isArray(orderProducts) || orderProducts.length === 0) {
+    const cancelled = isCancelledOrderStatus(status);
+    const products = Array.isArray(orderProducts) ? orderProducts : [];
+
+    if (!patient || !clinicId || !partner || !estimateDate) {
       return res.status(400).json({
-        message: 'All required fields must be provided: invoiceNumber, patient (with name, age, gender), clinicId, partner, estimateDate, and orderProducts (non-empty array)'
+        message: 'All required fields must be provided: patient (with name), clinicId, partner, and estimateDate'
+      });
+    }
+
+    if (!cancelled && products.length === 0) {
+      return res.status(400).json({
+        message: 'orderProducts (non-empty array) is required unless order status is CANCELLED'
       });
     }
 
     // Validate patient data
-    if (!patient.name || patient.age === undefined || !patient.gender) {
+    if (!patient.name) {
       return res.status(400).json({
-        message: 'Patient data must include: name, age, and gender'
+        message: 'Patient name is required'
       });
     }
 
-    // Validate each order product
-    for (const product of orderProducts) {
+    const patientAge =
+      patient.age === undefined || patient.age === null || patient.age === ''
+        ? 0
+        : typeof patient.age === 'string'
+          ? parseInt(patient.age, 10)
+          : patient.age;
+    const normalizedPatient = {
+      name: patient.name,
+      age: Number.isFinite(patientAge) ? patientAge : 0,
+      gender: String(patient.gender ?? '').trim(),
+      contactNumber: patient.contactNumber,
+    };
+
+    // Validate each order product (skipped for cancelled orders with no lines)
+    if (!cancelled) {
+    for (const product of products) {
       if (!product.productId || !product.shadeType || !product.finishingInstructions ||
           product.componentDetails === undefined || product.componentDetails === null || !product.incaseOfAllAbutments || !product.occlusalStaining ||
           !product.ponticDesign || !product.repeatCorrections || !product.enterReason) {
@@ -45,6 +69,7 @@ export async function createOrderController(req: Request, res: Response) {
           message: 'Each order product must have all required fields: productId, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason'
         });
       }
+    }
     }
 
     // Validate files if provided
@@ -59,25 +84,20 @@ export async function createOrderController(req: Request, res: Response) {
     }
 
     const orderData: CreateOrderData = {
-      invoiceNumber,
-      patient: {
-        name: patient.name,
-        age: typeof patient.age === 'string' ? parseInt(patient.age, 10) : patient.age,
-        gender: patient.gender,
-        contactNumber: patient.contactNumber,
-      },
+      invoiceNumber: invoiceNumber?.trim() || undefined,
+      patient: normalizedPatient,
       doctorId,
       clinicId,
       referredDoctorId,
       referenceName,
       partner,
       estimateDate: new Date(estimateDate),
-      orderProducts,
+      orderProducts: products,
       files,
       status,
     };
 
-    await orderService.createOrder(orderData);
+    await orderService.createOrder(orderData, getActorUserId(res));
     return res.status(201).json({ message: 'Created order successfully' });
   } catch (error: any) {
     if (
@@ -252,9 +272,9 @@ export async function updateOrderController(req: Request, res: Response) {
 
     // Validate patient data if provided
     if (patient !== undefined) {
-      if (!patient.name || patient.age === undefined || !patient.gender) {
+      if (!patient.name) {
         return res.status(400).json({
-          message: 'Patient data must include: name, age, and gender'
+          message: 'Patient name is required'
         });
       }
     }
@@ -297,10 +317,16 @@ export async function updateOrderController(req: Request, res: Response) {
     if (invoiceNumber !== undefined) updateData.invoiceNumber = invoiceNumber;
     if (patientId !== undefined) updateData.patientId = patientId;
     if (patient !== undefined) {
+      const patientAge =
+        patient.age === undefined || patient.age === null || patient.age === ''
+          ? 0
+          : typeof patient.age === 'string'
+            ? parseInt(patient.age, 10)
+            : patient.age;
       updateData.patient = {
         name: patient.name,
-        age: typeof patient.age === 'string' ? parseInt(patient.age, 10) : patient.age,
-        gender: patient.gender,
+        age: Number.isFinite(patientAge) ? patientAge : 0,
+        gender: String(patient.gender ?? '').trim(),
         contactNumber: patient.contactNumber,
       };
     }
@@ -318,7 +344,7 @@ export async function updateOrderController(req: Request, res: Response) {
     if (orderProducts !== undefined) updateData.orderProducts = orderProducts;
     if (files !== undefined) updateData.files = files;
 
-    const updatedOrder = await orderService.updateOrder(id, updateData, (req as any).user?.id);
+    const updatedOrder = await orderService.updateOrder(id, updateData, getActorUserId(res));
     return res.json(updatedOrder);
   } catch (error: any) {
     if (
@@ -371,6 +397,11 @@ export async function updateOrderStatusController(req: Request, res: Response) {
 
     if (!status) {
       return res.status(400).json({ message: 'Status is required' });
+    }
+
+    const user = res.locals.user as AuthUser | undefined;
+    if (!user || !canChangeOrderStatus(user.role, status)) {
+      return res.status(403).json({ message: 'You are not allowed to set this order status' });
     }
 
     // Check if order exists
