@@ -110,6 +110,18 @@ export function canChangeOrderStatus(role: Role, newStatus: string): boolean {
   return false;
 }
 
+/** Full update access, or Front Office may update only orders they created. */
+export function canUpdateOrder(
+  user: AuthUser,
+  order: { createdById?: string | null },
+): boolean {
+  if (hasPermission(user.role, 'orders.update')) return true;
+  if (user.role === 'FRONT_OFFICE' && order.createdById && order.createdById === user.id) {
+    return true;
+  }
+  return false;
+}
+
 export function getUserFromLocals(locals: { user?: AuthUser }): AuthUser | undefined {
   return locals.user;
 }

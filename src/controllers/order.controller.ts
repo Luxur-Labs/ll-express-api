@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 
 import { OrderService, CreateOrderData, UpdateOrderData } from '../services/order.service';
-import { canChangeOrderStatus } from '../config/permissions';
+import { canChangeOrderStatus, canUpdateOrder } from '../config/permissions';
 import type { AuthUser } from '../types/auth';
 import { getActorUserId } from '../utils/requestUser';
 import { isCancelledOrderStatus } from '../utils/orderStatus';
@@ -264,10 +264,24 @@ export async function updateOrderController(req: Request, res: Response) {
       return res.status(400).json({ message: 'Order ID is required' });
     }
 
+    const user = res.locals.user as AuthUser | undefined;
+
     // Check if order exists
     const existingOrder = await orderService.getOrderById(id);
     if (!existingOrder) {
       return res.status(404).json({ message: 'Order not found' });
+    }
+
+    if (!user || !canUpdateOrder(user, existingOrder)) {
+      return res.status(403).json({ message: 'You can only update orders you created' });
+    }
+
+    if (
+      user.role === 'FRONT_OFFICE' &&
+      status !== undefined &&
+      !canChangeOrderStatus(user.role, status)
+    ) {
+      return res.status(403).json({ message: 'You are not allowed to set this order status' });
     }
 
     // Validate patient data if provided
@@ -369,6 +383,15 @@ export async function addOrderActivityNoteController(req: Request, res: Response
 
     if (!id) {
       return res.status(400).json({ message: 'Order ID is required' });
+    }
+
+    const existingOrder = await orderService.getOrderById(id);
+    if (!existingOrder) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    if (!user || !canUpdateOrder(user, existingOrder)) {
+      return res.status(403).json({ message: 'You can only update orders you created' });
     }
 
     const order = await orderService.addOrderActivityNote(id, user?.id, note ?? '');

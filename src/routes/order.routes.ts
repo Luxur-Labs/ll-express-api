@@ -18,7 +18,7 @@ import {
   getOrdersByScanningModeController,
   getOrdersByDateRangeController,
 } from '../controllers/order.controller';
-import { authenticate, authorizePermissions, authorizeRoles } from '../middleware/auth.middleware';
+import { authenticate, authorizeOrderUpdate, authorizePermissions, authorizeRoles } from '../middleware/auth.middleware';
 import { ADMIN_ROLES } from '../config/permissions';
 import { validate } from '../middleware/validate.middleware';
 import {
@@ -79,10 +79,10 @@ router.get('/:id', authorizeRoles(...adminRoles), getOrderByIdController);
 
 // Create
 router.post('/', authorizePermissions('orders.create'), validate(createOrderSchema), createOrderController);
-router.post('/:id/activity-notes', authorizePermissions('orders.update'), validate(addOrderActivityNoteSchema), addOrderActivityNoteController);
+router.post('/:id/activity-notes', authorizeOrderUpdate, validate(addOrderActivityNoteSchema), addOrderActivityNoteController);
 
 // Update
-router.put('/:id', authorizePermissions('orders.update'), validate(updateOrderSchema), updateOrderController);
+router.put('/:id', authorizeOrderUpdate, validate(updateOrderSchema), updateOrderController);
 router.patch('/:id/status', authorizeRoles(...adminRoles), validate(updateOrderStatusSchema), updateOrderStatusController);
 
 // Delete — SUPER_ADMIN only

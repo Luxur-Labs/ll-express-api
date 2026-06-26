@@ -64,6 +64,15 @@ export function authorizePermissions(...permissions: Permission[]) {
   };
 }
 
+/** Allows orders.update, or Front Office (ownership verified in controller). */
+export function authorizeOrderUpdate(req: Request, res: Response, next: NextFunction) {
+  const user = res.locals.user as AuthUser | undefined;
+  if (!user) return res.status(401).json({ message: 'Unauthorized' });
+  if (hasAnyPermission(user.role, ['orders.update'])) return next();
+  if (user.role === 'FRONT_OFFICE') return next();
+  return res.status(403).json({ message: 'Forbidden' });
+}
+
 export function authorizeEmployeeTypes(...types: EmployeeType[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     const user = res.locals.user as AuthUser | undefined;
