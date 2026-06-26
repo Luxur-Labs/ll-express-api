@@ -9,7 +9,7 @@ import {
   addRandomDelay
 } from '../services/security.service';
 import { EmployeeType, TechnicianGroup, Role as AuthRole } from '../types/auth';
-import { verifyPassword } from '../utils/password';
+import { hashPassword, verifyPassword } from '../utils/password';
 import { prisma } from '../utils/prisma';
 import { logger } from '../utils/logger';
 
@@ -53,12 +53,15 @@ export async function loginController(req: Request, res: Response) {
     // Successful login - record it
     await recordSuccessfulLogin(email, clientIp);
 
+    const mustChangePassword = user.mustChangePassword === true;
+
     const token = signToken({
       id: user.id,
       email: user.email,
       role: user.role as unknown as AuthRole,
       employeeType: (user.employeeType?.name as EmployeeType | undefined) ?? null,
       technicianGroup: (user.technicianGroup?.name as TechnicianGroup | undefined) ?? null,
+      mustChangePassword,
     });
 
     return res.json({ 
@@ -70,6 +73,7 @@ export async function loginController(req: Request, res: Response) {
         employeeType: user.employeeType?.name,
         technicianGroup: user.technicianGroup?.name,
         lastLoginAt: user.lastLoginAt,
+        mustChangePassword,
         name: (user as any).name ?? null,
         dateOfBirth: (user as any).dateOfBirth ?? null,
         contact: (user as any).contact ?? null,
@@ -115,6 +119,64 @@ export async function forgotPasswordController(req: Request, res: Response) {
   await forgotPasswordInitiate(email);
   // Always return 202 to avoid user enumeration
   return res.status(202).json({ message: 'If the email exists, a reset message will be sent.' });
+}
+
+export async function changePasswordController(req: Request, res: Response) {
+  const authUser = res.locals.user;
+  if (!authUser) return res.status(401).json({ message: 'Unauthorized' });
+
+  const { currentPassword, newPassword } = req.body as {
+    currentPassword: string;
+    newPassword: string;
+  };
+
+  const user = await prisma.user.findUnique({
+    where: { id: authUser.id },
+    include: { employeeType: true, technicianGroup: true },
+  });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+
+  const ok = await verifyPassword(currentPassword, user.passwordHash);
+  if (!ok) {
+    return res.status(401).json({ message: 'Current password is incorrect' });
+  }
+
+  if (currentPassword === newPassword) {
+    return res.status(400).json({ message: 'New password must be different from the current password' });
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash, mustChangePassword: false },
+  });
+
+  const token = signToken({
+    id: user.id,
+    email: user.email,
+    role: user.role as unknown as AuthRole,
+    employeeType: (user.employeeType?.name as EmployeeType | undefined) ?? null,
+    technicianGroup: (user.technicianGroup?.name as TechnicianGroup | undefined) ?? null,
+    mustChangePassword: false,
+  });
+
+  return res.json({
+    message: 'Password changed successfully',
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      employeeType: user.employeeType?.name,
+      technicianGroup: user.technicianGroup?.name,
+      lastLoginAt: user.lastLoginAt,
+      mustChangePassword: false,
+      name: (user as any).name ?? null,
+      dateOfBirth: (user as any).dateOfBirth ?? null,
+      contact: (user as any).contact ?? null,
+      profilePhoto: (user as any).profilePhoto ?? null,
+    },
+  });
 }
 
 

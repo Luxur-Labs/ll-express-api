@@ -13,6 +13,13 @@ export const forgotPasswordSchema = z.object({
   }),
 });
 
+export const changePasswordSchema = z.object({
+  body: z.object({
+    currentPassword: z.string().min(1, 'current password is required'),
+    newPassword: z.string().min(6, 'new password must be at least 6 characters'),
+  }),
+});
+
 export const updateUserSchema = z.object({
   body: z.object({
     email: z.string().email('invalid email format').transform(s => s.trim().toLowerCase()).optional(),

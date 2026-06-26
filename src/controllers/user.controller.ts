@@ -6,10 +6,14 @@ import { Role } from '../types/auth';
 export async function listUsersController(req: Request, res: Response) {
   const users = await listUsers();
   const result = users.map((u: any) => ({
+    id: u.id,
     name: u.name ?? null,
+    role: u.role,
     dateOfBirth: u.dateOfBirth ?? null,
     Contact: u.contact ?? null,
+    contact: u.contact ?? null,
     UserType: u.employeeType?.name ?? null,
+    employeeType: u.employeeType?.name ?? null,
     email: u.email,
     profilePicture: u.profilePhoto ?? null,
     technicianGroup: u.technicianGroup?.name ?? null,
@@ -34,7 +38,7 @@ export async function listEmployeesController(req: Request, res: Response) {
 }
 
 export async function createUserController(req: Request, res: Response) {
-  const { email, password, role, employeeTypeName, technicianGroupName, name, dateOfBirth, contact } = req.body as Partial<{
+  const { email, password, role, employeeTypeName, technicianGroupName, name, dateOfBirth, contact, mustChangePassword } = req.body as Partial<{
     email: string;
     password: string;
     role: Role;
@@ -43,6 +47,7 @@ export async function createUserController(req: Request, res: Response) {
     name?: string | null;
     dateOfBirth?: string | null;
     contact?: string | null;
+    mustChangePassword?: boolean | string;
   }>;
   if (!email || !password || !role) return res.status(400).json({ message: 'email, password, role required' });
 
@@ -62,13 +67,38 @@ export async function createUserController(req: Request, res: Response) {
     documentFile,
     profilePhotoFile,
     publicBaseUrl: `${req.protocol}://${req.get('host')}`,
+    mustChangePassword: mustChangePassword === true || mustChangePassword === 'true',
   });
   return res.status(201).json({ user });
 }
 
 export async function updateUserController(req: Request, res: Response) {
   const { id } = req.params as { id: string };
-  const user = await updateUser(id, req.body);
+  const { email, password, role, employeeTypeName, technicianGroupName, name, dateOfBirth, contact, mustChangePassword } = req.body as Partial<{
+    email: string;
+    password: string;
+    role: Role;
+    employeeTypeName?: string | null;
+    technicianGroupName?: string | null;
+    name?: string | null;
+    dateOfBirth?: string | null;
+    contact?: string | null;
+    mustChangePassword?: boolean | string;
+  }>;
+
+  const user = await updateUser(id, {
+    email,
+    password,
+    role,
+    employeeTypeName: employeeTypeName ?? undefined,
+    technicianGroupName: technicianGroupName ?? undefined,
+    name: name ?? undefined,
+    dateOfBirth: dateOfBirth ?? undefined,
+    contact: contact ?? undefined,
+    ...(mustChangePassword !== undefined
+      ? { mustChangePassword: mustChangePassword === true || mustChangePassword === 'true' }
+      : {}),
+  });
   return res.json({ user });
 }
 

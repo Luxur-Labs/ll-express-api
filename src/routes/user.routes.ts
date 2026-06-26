@@ -28,7 +28,17 @@ router.post(
   ]),
   createUserController
 );
-router.put('/:id', authenticate, authorizeRoles('SUPER_ADMIN'), upload.none(), validate(updateUserSchema), updateUserController);
+router.put(
+  '/:id',
+  authenticate,
+  authorizeRoles('SUPER_ADMIN'),
+  upload.fields([
+    { name: 'document', maxCount: 1 },
+    { name: 'profilePhoto', maxCount: 1 },
+  ]),
+  validate(updateUserSchema),
+  updateUserController,
+);
 router.delete('/:id', authenticate, authorizeRoles('SUPER_ADMIN'), deleteUserController);
 
 export default router;

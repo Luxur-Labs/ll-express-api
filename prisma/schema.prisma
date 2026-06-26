@@ -33,6 +33,8 @@ model User {
   accountLockedUntil    DateTime?
   lastLoginAt           DateTime?
   lastLoginIp           String?
+  /** When true, user must set a new password before using the app. */
+  mustChangePassword    Boolean           @default(false)
 
   // Profile fields
   dateOfBirth           DateTime?

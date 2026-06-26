@@ -12,6 +12,7 @@ export interface LoginPayload {
   role: Role;
   employeeType?: EmployeeType | null;
   technicianGroup?: TechnicianGroup | null;
+  mustChangePassword?: boolean;
 }
 
 export function signToken(payload: LoginPayload) {

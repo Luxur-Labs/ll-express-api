@@ -32,6 +32,7 @@ export async function createUser(input: {
   documentFile?: Express.Multer.File | undefined;
   profilePhotoFile?: Express.Multer.File | undefined;
   publicBaseUrl?: string | undefined;
+  mustChangePassword?: boolean;
 }) {
   const passwordHash = await hashPassword(input.password);
 
@@ -81,6 +82,7 @@ export async function createUser(input: {
     contact: input.contact ?? null,
     document: documentUrl,
     profilePhoto: profilePhotoUrl,
+    ...(input.mustChangePassword === true ? { mustChangePassword: true } : {}),
   };
 
   return prisma.user.create({ data });
@@ -95,12 +97,18 @@ export async function updateUser(id: string, input: Partial<{
   name: string | null;
   dateOfBirth: string | null;
   contact: string | null;
+  mustChangePassword?: boolean;
 }>) {
   const data: Record<string, unknown> = {};
   if (input.email) data.email = input.email;
   if (input.role) data.role = input.role;
   if (typeof input.password === 'string') {
     data.passwordHash = await hashPassword(input.password);
+  }
+  if (input.mustChangePassword === true) {
+    data.mustChangePassword = true;
+  } else if (input.mustChangePassword === false) {
+    data.mustChangePassword = false;
   }
   if (input.name !== undefined) data.name = input.name;
   if (input.dateOfBirth !== undefined) {

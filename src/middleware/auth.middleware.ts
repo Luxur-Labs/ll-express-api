@@ -24,6 +24,20 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   try {
     const user = verifyToken(token);
     res.locals.user = user;
+
+    if (user.mustChangePassword) {
+      const relativePath = req.path;
+      const allowed =
+        (req.method === 'POST' && relativePath === '/change-password') ||
+        (req.method === 'POST' && relativePath === '/logout');
+      if (!allowed) {
+        return res.status(403).json({
+          message: 'You must change your password before continuing.',
+          code: 'PASSWORD_CHANGE_REQUIRED',
+        });
+      }
+    }
+
     next();
   } catch {
     return res.status(401).json({ message: 'Invalid token' });

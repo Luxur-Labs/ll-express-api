@@ -8,6 +8,7 @@ export interface AuthUser {
   role: Role;
   employeeType?: EmployeeType | null;
   technicianGroup?: TechnicianGroup | null;
+  mustChangePassword?: boolean;
 }
 
 
