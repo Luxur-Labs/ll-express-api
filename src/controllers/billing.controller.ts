@@ -169,6 +169,51 @@ export async function getBillingAllClinicsSummaryController(_req: Request, res: 
   }
 }
 
+export async function getBillingAllClinicsLedgerController(req: Request, res: Response) {
+  try {
+    const take = Math.min(500, Math.max(1, Number(req.query.take) || 100));
+    const skip = Math.max(0, Number(req.query.skip) || 0);
+    const data = await billingService.listAllLedger(take, skip);
+    return res.json(data);
+  } catch (e: any) {
+    return res.status(400).json({ message: e?.message || 'Ledger load failed' });
+  }
+}
+
+export async function getBillingAllClinicsInvoiceCountsController(_req: Request, res: Response) {
+  try {
+    const counts = await billingService.allClinicsInvoiceStatusCounts();
+    return res.json(counts);
+  } catch (e: any) {
+    return res.status(400).json({ message: e?.message || 'Count failed' });
+  }
+}
+
+export async function listBillingAllClinicsInvoicesController(req: Request, res: Response) {
+  try {
+    const take = Math.min(100, Math.max(1, Number(req.query.take) || 50));
+    const skip = Math.max(0, Number(req.query.skip) || 0);
+    const statusRaw = String(req.query.status ?? 'all').toLowerCase();
+    const allowed: Array<'all' | 'open' | 'partial' | 'paid' | 'cancelled'> = [
+      'all',
+      'open',
+      'partial',
+      'paid',
+      'cancelled',
+    ];
+    const status = (allowed.includes(statusRaw as any) ? statusRaw : 'all') as
+      | 'all'
+      | 'open'
+      | 'partial'
+      | 'paid'
+      | 'cancelled';
+    const { data, total } = await billingService.listAllInvoices({ take, skip, status });
+    return res.json({ data, total });
+  } catch (e: any) {
+    return res.status(400).json({ message: e?.message || 'List failed' });
+  }
+}
+
 export async function getBillingOverallSummaryController(_req: Request, res: Response) {
   try {
     const data = await billingService.overallSummary();

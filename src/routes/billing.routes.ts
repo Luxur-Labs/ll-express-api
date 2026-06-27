@@ -10,6 +10,9 @@ import {
   listPendingInvoicesController,
   getBillingClinicSummaryController,
   getBillingAllClinicsSummaryController,
+  getBillingAllClinicsLedgerController,
+  getBillingAllClinicsInvoiceCountsController,
+  listBillingAllClinicsInvoicesController,
   getBillingClinicInvoiceCountsController,
   getBillingOverallSummaryController,
   getBillingInvoiceController,
@@ -53,6 +56,9 @@ router.post('/clinics/:clinicId/razorpay/order', authorizePermissions('billing.p
 router.post('/clinics/:clinicId/razorpay/verify', authorizePermissions('billing.payments'), verifyRazorpayClinicPaymentController);
 router.get('/summary', authorizePermissions('dashboard.billing'), getBillingOverallSummaryController);
 router.get('/all/summary', authorizePermissions('billing.manage'), getBillingAllClinicsSummaryController);
+router.get('/all/ledger', authorizePermissions('billing.manage'), getBillingAllClinicsLedgerController);
+router.get('/all/invoices/counts', authorizePermissions('billing.view'), getBillingAllClinicsInvoiceCountsController);
+router.get('/all/invoices', authorizePermissions('billing.view'), listBillingAllClinicsInvoicesController);
 router.get('/clinics/:clinicId/ledger', authorizePermissions('billing.manage'), getBillingLedgerController);
 router.get('/clinics/:clinicId/summary', authorizePermissions('billing.manage'), getBillingClinicSummaryController);
 

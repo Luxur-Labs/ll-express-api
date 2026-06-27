@@ -1120,11 +1120,7 @@ export class BillingService {
       where: {
         clinicId,
         entryType: {
-          in: [
-            BillingLedgerEntryType.PAYMENT,
-            BillingLedgerEntryType.CREDIT_ADJUSTMENT,
-            BillingLedgerEntryType.MANUAL,
-          ],
+          in: [...BillingService.ledgerEntryTypes()],
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -1135,14 +1131,7 @@ export class BillingService {
     return {
       clinicId,
       pendingBalance: roundMoney(toNumber(clinic.pendingBalance)),
-      entries: entries.map((e) => ({
-        id: e.id,
-        createdAt: e.createdAt.toISOString(),
-        entryType: e.entryType,
-        description: e.description,
-        amount: toNumber(e.amount),
-        invoiceNumber: e.invoice?.invoiceNumber ?? null,
-      })),
+      entries: entries.map((e) => BillingService.mapLedgerEntry(e)),
     };
   }
 
@@ -1366,8 +1355,17 @@ export class BillingService {
     clinicId: string,
     status: 'all' | 'open' | 'partial' | 'paid' | 'cancelled'
   ): Prisma.BillingInvoiceWhereInput {
+    return BillingService.buildInvoiceListWhere(status, clinicId);
+  }
+
+  static buildInvoiceListWhere(
+    status: 'all' | 'open' | 'partial' | 'paid' | 'cancelled',
+    clinicId?: string
+  ): Prisma.BillingInvoiceWhereInput {
     const z = new Prisma.Decimal(0);
-    const base: Prisma.BillingInvoiceWhereInput = { clinicId };
+    const base: Prisma.BillingInvoiceWhereInput = clinicId
+      ? { clinicId }
+      : { clinic: { isActive: true } };
     switch (status) {
       case 'all':
         return base;
@@ -1395,6 +1393,139 @@ export class BillingService {
       default:
         return base;
     }
+  }
+
+  private static ledgerEntryTypes() {
+    return [
+      BillingLedgerEntryType.PAYMENT,
+      BillingLedgerEntryType.CREDIT_ADJUSTMENT,
+      BillingLedgerEntryType.MANUAL,
+    ] as const;
+  }
+
+  private static mapLedgerEntry(e: {
+    id: string;
+    createdAt: Date;
+    entryType: BillingLedgerEntryType;
+    description: string;
+    amount: Prisma.Decimal | number;
+    clinicId: string;
+    clinic?: { clinicName: string; organizationId: string };
+    invoice?: { invoiceNumber: string | null } | null;
+  }) {
+    return {
+      id: e.id,
+      createdAt: e.createdAt.toISOString(),
+      entryType: e.entryType,
+      description: e.description,
+      amount: toNumber(e.amount),
+      invoiceNumber: e.invoice?.invoiceNumber ?? null,
+      clinicId: e.clinicId,
+      clinicName: e.clinic?.clinicName ?? null,
+      organizationId: e.clinic?.organizationId ?? null,
+    };
+  }
+
+  async listAllLedger(take = 100, skip = 0) {
+    const safeTake = Math.min(500, Math.max(1, take));
+    const safeSkip = Math.max(0, skip);
+    const where = {
+      clinic: { isActive: true },
+      entryType: { in: [...BillingService.ledgerEntryTypes()] },
+    };
+    const [entries, total] = await Promise.all([
+      prisma.billingLedgerEntry.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: safeSkip,
+        take: safeTake,
+        include: {
+          invoice: { select: { invoiceNumber: true } },
+          clinic: { select: { id: true, clinicName: true, organizationId: true } },
+        },
+      }),
+      prisma.billingLedgerEntry.count({ where }),
+    ]);
+
+    return {
+      entries: entries.map((e) => BillingService.mapLedgerEntry(e)),
+      total,
+    };
+  }
+
+  async listAllInvoices(
+    options: {
+      take?: number;
+      skip?: number;
+      status?: 'all' | 'open' | 'partial' | 'paid' | 'cancelled';
+    } = {}
+  ) {
+    const take = Math.min(100, Math.max(1, options.take ?? 50));
+    const skip = Math.max(0, options.skip ?? 0);
+    const status = options.status ?? 'all';
+    const where = BillingService.buildInvoiceListWhere(status);
+
+    const include = {
+      clinic: { select: { id: true, clinicName: true, organizationId: true } },
+      lines: {
+        select: {
+          orderId: true,
+        },
+      },
+    } as const;
+
+    const [list, total] = await Promise.all([
+      prisma.billingInvoice.findMany({
+        where,
+        orderBy: { invoiceDate: 'desc' },
+        skip,
+        take,
+        include,
+      }),
+      prisma.billingInvoice.count({ where }),
+    ]);
+
+    const data = list.map((i) => ({
+      id: i.id,
+      clinicId: i.clinicId,
+      clinicName: i.clinic.clinicName,
+      organizationId: i.clinic.organizationId,
+      invoiceNumber: i.invoiceNumber,
+      periodLabel: i.periodLabel,
+      periodType: i.periodType,
+      invoiceDate: i.invoiceDate.toISOString(),
+      invoiceSubtotal: toNumber(i.invoiceSubtotal),
+      previousBalance: toNumber(i.previousBalance),
+      totalPayable: toNumber(i.totalPayable),
+      receivedAmount: toNumber(i.receivedAmount),
+      creditsAdjusted: toNumber(i.creditsAdjusted),
+      netPayable: toNumber(i.netPayable),
+      isPaid: i.isPaid,
+      cancelledAt: i.cancelledAt ? i.cancelledAt.toISOString() : null,
+      orderCount: new Set(i.lines.map((l) => l.orderId).filter(Boolean)).size,
+      lineCount: i.lines.length,
+    }));
+
+    return { data, total };
+  }
+
+  async allClinicsInvoiceStatusCounts() {
+    const [open, partial, paid, cancelled] = await Promise.all([
+      prisma.billingInvoice.count({
+        where: BillingService.buildInvoiceListWhere('open'),
+      }),
+      prisma.billingInvoice.count({
+        where: BillingService.buildInvoiceListWhere('partial'),
+      }),
+      prisma.billingInvoice.count({
+        where: BillingService.buildInvoiceListWhere('paid'),
+      }),
+      prisma.billingInvoice.count({
+        where: BillingService.buildInvoiceListWhere('cancelled'),
+      }),
+    ]);
+
+    return { open, partial, paid, cancelled };
   }
 
   async listInvoices(
