@@ -1,5 +1,6 @@
 import { prisma } from '../utils/prisma';
 import { createUserStampFields, updateUserStampFields, userStampInclude } from '../utils/userStamps';
+import { ACTIVE_ENTITY_FILTER, withActiveOnly } from '../utils/softDelete.util';
 
 export interface CreatePatientData {
   name: string;
@@ -32,6 +33,7 @@ export class PatientService {
 
   async getAllPatients() {
     return await prisma.patient.findMany({
+      where: ACTIVE_ENTITY_FILTER,
       orderBy: { createdAt: 'desc' },
       include: userStampInclude,
     });
@@ -45,27 +47,32 @@ export class PatientService {
     });
   }
 
-  async deletePatient(id: string) {
-    return await prisma.patient.delete({
+  async deletePatient(id: string, actorUserId?: string) {
+    const existing = await prisma.patient.findUnique({ where: { id } });
+    if (!existing) {
+      throw new Error('Patient not found');
+    }
+    return await prisma.patient.update({
       where: { id },
+      data: { isActive: false, ...updateUserStampFields(actorUserId) },
     });
   }
 
   async getPatientsByGender(gender: string) {
     return await prisma.patient.findMany({
-      where: { gender },
+      where: withActiveOnly({ gender }),
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async getPatientsByAgeRange(minAge: number, maxAge: number) {
     return await prisma.patient.findMany({
-      where: {
+      where: withActiveOnly({
         age: {
           gte: minAge,
           lte: maxAge,
         },
-      },
+      }),
       orderBy: { age: 'asc' },
     });
   }
@@ -73,6 +80,7 @@ export class PatientService {
   async searchPatientsByName(name: string) {
     return await prisma.patient.findMany({
       where: {
+        isActive: true,
         name: {
           contains: name,
           mode: 'insensitive',
@@ -84,6 +92,7 @@ export class PatientService {
 
   async getPatientsList() {
     return await prisma.patient.findMany({
+      where: ACTIVE_ENTITY_FILTER,
       select: {
         id: true,
         name: true,

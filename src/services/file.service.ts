@@ -120,9 +120,7 @@ export class FileService {
   }
 
   async hardDeleteFile(id: string) {
-    return prisma.file.delete({
-      where: { id },
-    });
+    return this.deleteFile(id);
   }
 
   async getFilesByCategory(category: string) {

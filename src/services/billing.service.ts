@@ -181,6 +181,7 @@ export class BillingService {
     const orders = await prisma.order.findMany({
       where: {
         clinicId,
+        isActive: true,
         estimateDate: { gte: dateFrom, lte: dateTo },
       },
       include: {
@@ -1167,10 +1168,11 @@ export class BillingService {
       cashPaymentsAgg,
       onlinePaymentsAgg,
     ] = await Promise.all([
-      prisma.order.count({ where: { clinicId } }),
+      prisma.order.count({ where: { clinicId, isActive: true } }),
       prisma.order.count({
         where: {
           clinicId,
+          isActive: true,
           createdAt: { gte: todayStart, lt: tomorrowStart },
         },
       }),
@@ -1236,6 +1238,46 @@ export class BillingService {
     };
   }
 
+  /** Aggregated billing stats across all active clinics (for Billing Management “All”). */
+  async allClinicsBillingSummary() {
+    const z = new Prisma.Decimal(0);
+    const [pendingBalanceAgg, totalRevenueAgg, cashPaymentsAgg, onlinePaymentsAgg] = await Promise.all([
+      prisma.clinic.aggregate({
+        where: { isActive: true },
+        _sum: { pendingBalance: true },
+      }),
+      prisma.billingInvoice.aggregate({
+        where: { cancelledAt: null },
+        _sum: { receivedAmount: true },
+      }),
+      prisma.billingLedgerEntry.aggregate({
+        where: {
+          entryType: BillingLedgerEntryType.PAYMENT,
+          amount: { lt: z },
+          NOT: {
+            description: { contains: 'Razorpay', mode: 'insensitive' },
+          },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.billingLedgerEntry.aggregate({
+        where: {
+          entryType: BillingLedgerEntryType.PAYMENT,
+          amount: { lt: z },
+          description: { contains: 'Razorpay', mode: 'insensitive' },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    return {
+      pendingBalance: roundMoney(toNumber(pendingBalanceAgg._sum.pendingBalance)),
+      totalRevenue: roundMoney(toNumber(totalRevenueAgg._sum.receivedAmount)),
+      paidCashFromLedger: roundMoney(Math.abs(toNumber(cashPaymentsAgg._sum.amount))),
+      paidOnlineFromLedger: roundMoney(Math.abs(toNumber(onlinePaymentsAgg._sum.amount))),
+    };
+  }
+
   async overallSummary() {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1249,9 +1291,10 @@ export class BillingService {
       paidInvoices,
       pendingInvoices,
     ] = await Promise.all([
-      prisma.order.count({}),
+      prisma.order.count({ where: { isActive: true } }),
       prisma.order.count({
         where: {
+          isActive: true,
           createdAt: { gte: todayStart, lt: tomorrowStart },
         },
       }),

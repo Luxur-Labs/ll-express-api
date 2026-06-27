@@ -53,6 +53,20 @@ export async function loginController(req: Request, res: Response) {
     // Successful login - record it
     await recordSuccessfulLogin(email, clientIp);
 
+    if (user.role === 'DOCTOR' || user.role === 'EMPLOYEE') {
+      logger.warn({ email, ip: clientIp, role: user.role }, 'Login blocked for disabled role');
+      return res.status(403).json({
+        message: 'This account type is no longer supported. Contact your administrator.',
+      });
+    }
+
+    if (user.isActive === false) {
+      logger.warn({ email, ip: clientIp }, 'Login blocked for revoked account');
+      return res.status(403).json({
+        message: 'This account has been revoked. Contact your administrator.',
+      });
+    }
+
     const mustChangePassword = user.mustChangePassword === true;
 
     const token = signToken({

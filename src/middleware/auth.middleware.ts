@@ -3,8 +3,9 @@ import { NextFunction, Request, Response } from 'express';
 import { verifyToken } from '../services/auth.service';
 import { Role, EmployeeType, TechnicianGroup, AuthUser } from '../types/auth';
 import { hasAnyPermission, Permission } from '../config/permissions';
+import { prisma } from '../utils/prisma';
 
-export function authenticate(req: Request, res: Response, next: NextFunction) {
+export async function authenticate(req: Request, res: Response, next: NextFunction) {
   let token: string | undefined;
   
   // Check for Authorization header first (Bearer token)
@@ -23,6 +24,17 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   
   try {
     const user = verifyToken(token);
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { isActive: true },
+    });
+    if (!dbUser || dbUser.isActive === false) {
+      return res.status(403).json({
+        message: 'This account has been revoked. Contact your administrator.',
+        code: 'ACCOUNT_REVOKED',
+      });
+    }
+
     res.locals.user = user;
 
     if (user.mustChangePassword) {

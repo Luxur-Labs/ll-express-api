@@ -3,17 +3,21 @@ import { uploadToCdn } from '../utils/cdn';
 
 import { hashPassword } from '../utils/password';
 import { prisma } from '../utils/prisma';
+import { ACTIVE_ENTITY_FILTER } from '../utils/softDelete.util';
 
 export async function findUserByEmail(email: string) {
   return prisma.user.findUnique({ where: { email }, include: { employeeType: true, technicianGroup: true } });
 }
 
 export async function listUsers() {
-  return prisma.user.findMany({ include: { employeeType: true, technicianGroup: true } });
+  return prisma.user.findMany({
+    where: ACTIVE_ENTITY_FILTER,
+    include: { employeeType: true, technicianGroup: true },
+  });
 }
 
 export async function listEmployees(filter?: { employeeTypeName?: string }) {
-  const where: any = { role: 'EMPLOYEE' };
+  const where: any = { role: 'EMPLOYEE', ...ACTIVE_ENTITY_FILTER };
   if (filter?.employeeTypeName) {
     where.employeeType = { name: filter.employeeTypeName };
   }
@@ -133,12 +137,30 @@ export async function updateUser(id: string, input: Partial<{
   return prisma.user.update({ where: { id }, data });
 }
 
+export async function revokeUser(id: string) {
+  const existing = await prisma.user.findUnique({ where: { id } });
+  if (!existing) {
+    throw new Error('User not found');
+  }
+  if (existing.role === 'SUPER_ADMIN') {
+    throw new Error('Super Admin accounts cannot be revoked');
+  }
+  if (!existing.isActive) {
+    return existing;
+  }
+  return prisma.user.update({
+    where: { id },
+    data: { isActive: false },
+  });
+}
+
+/** @deprecated Use revokeUser — kept for route compatibility. */
 export async function deleteUser(id: string) {
-  return prisma.user.delete({ where: { id } });
+  return revokeUser(id);
 }
 
 export async function getDoctorsList(searchQuery?: string) {
-  const whereClause: any = { role: 'DOCTOR' };
+  const whereClause: any = { role: 'DOCTOR', ...ACTIVE_ENTITY_FILTER };
   
   if (searchQuery && searchQuery.trim()) {
     whereClause.name = {

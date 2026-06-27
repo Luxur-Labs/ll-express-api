@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 
 import { PRODUCT_IMPORT_HEADERS } from '../config/importExportHeaders';
 import { buildSpreadsheetBuffer, ExportFormat } from '../utils/spreadsheetExport.util';
+import { ACTIVE_ENTITY_FILTER } from '../utils/softDelete.util';
 
 const prisma = new PrismaClient();
 
@@ -14,6 +15,7 @@ function decimalToNumber(v: { toString(): string } | null | undefined): number |
 export class ProductExportService {
   async exportImportFormat(format: ExportFormat): Promise<Buffer> {
     const products = await prisma.product.findMany({
+      where: ACTIVE_ENTITY_FILTER,
       orderBy: [{ code: 'asc' }, { name: 'asc' }],
     });
 

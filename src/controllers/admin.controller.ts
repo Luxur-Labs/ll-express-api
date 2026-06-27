@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 
 import { EmployeeType, TechnicianGroup } from '../types/auth';
 import { prisma } from '../utils/prisma';
+import { ACTIVE_ENTITY_FILTER } from '../utils/softDelete.util';
 
 // Combined list endpoint removed; use listEmployeeTypesController and listTechnicianGroupsController
 
@@ -12,6 +13,7 @@ export async function listEmployeeTypesController(req: Request, res: Response) {
 
 export async function listTechnicianGroupsController(req: Request, res: Response) {
   const groups = await prisma.technicianGroup.findMany({
+    where: ACTIVE_ENTITY_FILTER,
     include: {
       leader: { include: { employeeType: true, technicianGroup: true } },
       members: { include: { employeeType: true, technicianGroup: true } },
@@ -232,10 +234,11 @@ export async function deleteTechnicianGroupController(req: Request, res: Respons
     data: { technicianGroupId: null },
   });
 
-  // Then delete the group
-  await prisma.technicianGroup.delete({
+  // Soft-delete the group (retain record and assignment history)
+  await prisma.technicianGroup.update({
     where: { id },
+    data: { isActive: false },
   });
 
-  return res.status(204).send();
+  return res.json({ message: 'Technician group deactivated.' });
 }

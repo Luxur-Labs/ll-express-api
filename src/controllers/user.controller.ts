@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
 
-import { createUser, deleteUser, listEmployees, listUsers, updateUser, getDoctorsList } from '../services/user.service';
+import { createUser, revokeUser, listEmployees, listUsers, updateUser, getDoctorsList } from '../services/user.service';
+import { CREATABLE_USER_ROLES } from '../config/permissions';
 import { Role } from '../types/auth';
+
+const CREATABLE_ROLES = new Set<Role>(CREATABLE_USER_ROLES);
 
 export async function listUsersController(req: Request, res: Response) {
   const users = await listUsers();
@@ -50,6 +53,11 @@ export async function createUserController(req: Request, res: Response) {
     mustChangePassword?: boolean | string;
   }>;
   if (!email || !password || !role) return res.status(400).json({ message: 'email, password, role required' });
+  if (!CREATABLE_ROLES.has(role)) {
+    return res.status(400).json({
+      message: 'Invalid role. Only Lab Manager and Front Office accounts can be created.',
+    });
+  }
 
   const files = req.files as Record<string, Express.Multer.File[]> | undefined;
   const documentFile = files?.document?.[0];
@@ -86,6 +94,12 @@ export async function updateUserController(req: Request, res: Response) {
     mustChangePassword?: boolean | string;
   }>;
 
+  if (role && !CREATABLE_ROLES.has(role)) {
+    return res.status(400).json({
+      message: 'Invalid role. Only Lab Manager and Front Office accounts are supported.',
+    });
+  }
+
   const user = await updateUser(id, {
     email,
     password,
@@ -104,8 +118,19 @@ export async function updateUserController(req: Request, res: Response) {
 
 export async function deleteUserController(req: Request, res: Response) {
   const { id } = req.params as { id: string };
-  await deleteUser(id);
-  return res.status(204).send();
+  try {
+    await revokeUser(id);
+    return res.json({ message: 'User access revoked. The account can no longer log in.' });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to revoke user';
+    if (message === 'User not found') {
+      return res.status(404).json({ message });
+    }
+    if (message === 'Super Admin accounts cannot be revoked') {
+      return res.status(403).json({ message });
+    }
+    return res.status(500).json({ message });
+  }
 }
 
 export async function getDoctorsListController(req: Request, res: Response) {

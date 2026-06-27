@@ -1,4 +1,16 @@
 import { prisma } from '../utils/prisma';
+import {
+  endOfToday,
+  startOfToday,
+  sumOrdersSales,
+} from '../utils/orderSales.util';
+import { ACTIVE_ENTITY_FILTER } from '../utils/softDelete.util';
+
+const orderSalesInclude = {
+  orderProducts: {
+    include: { product: true },
+  },
+} as const;
 
 export interface DashboardMetrics {
   users: {
@@ -38,6 +50,12 @@ export interface DashboardMetrics {
     recentOrders: number; // Last 30 days
     recentRevenue: number; // Last 30 days
   };
+  sales: {
+    totalSales: number;
+    todaySales: number;
+    totalOrders: number;
+    todayOrders: number;
+  };
   clinics: {
     total: number;
     recentClinics: number; // Last 30 days
@@ -52,6 +70,8 @@ export class DashboardService {
   async getDashboardMetrics(): Promise<DashboardMetrics> {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const todayStart = startOfToday();
+    const todayEnd = endOfToday();
 
     // User metrics
     const [
@@ -62,6 +82,8 @@ export class DashboardService {
       recentUsers,
       totalOrders,
       ordersWithRevenue,
+      todayOrdersWithProducts,
+      todayOrderCount,
       ordersByStatus,
       ordersByPartner,
       ordersByScanningMode,
@@ -92,28 +114,41 @@ export class DashboardService {
       }),
 
       // Order counts
-      prisma.order.count(),
+      prisma.order.count({ where: ACTIVE_ENTITY_FILTER }),
       prisma.order.findMany({
-        include: {
-          orderProducts: {
-            include: { product: true }
-          }
-        }
-      }).catch(() => []), // Handle empty results
+        where: ACTIVE_ENTITY_FILTER,
+        include: orderSalesInclude,
+      }).catch(() => []),
+      prisma.order.findMany({
+        where: {
+          ...ACTIVE_ENTITY_FILTER,
+          createdAt: { gte: todayStart, lte: todayEnd },
+        },
+        include: orderSalesInclude,
+      }).catch(() => []),
+      prisma.order.count({
+        where: {
+          ...ACTIVE_ENTITY_FILTER,
+          createdAt: { gte: todayStart, lte: todayEnd },
+        },
+      }),
       prisma.order.groupBy({
         by: ['status'],
+        where: ACTIVE_ENTITY_FILTER,
         _count: { status: true }
       }).catch(() => []), // Handle empty results
       prisma.order.groupBy({
         by: ['partner'],
+        where: ACTIVE_ENTITY_FILTER,
         _count: { partner: true }
       }).catch(() => []), // Handle empty results
       prisma.order.groupBy({
         by: ['scanningMode'],
+        where: ACTIVE_ENTITY_FILTER,
         _count: { scanningMode: true }
       }).catch(() => []), // Handle empty results
       prisma.order.count({
-        where: { createdAt: { gte: thirtyDaysAgo } }
+        where: { ...ACTIVE_ENTITY_FILTER, createdAt: { gte: thirtyDaysAgo } },
       }),
 
       // Clinic counts
@@ -129,12 +164,17 @@ export class DashboardService {
       })
     ]);
 
-    // Calculate revenue metrics
+    // Calculate revenue metrics (legacy — product price only, no units/discount)
     const totalRevenue = Array.isArray(ordersWithRevenue) ? ordersWithRevenue.reduce((sum, order) => {
       return sum + (order.orderProducts || []).reduce((orderSum, op) => {
         return orderSum + Number(op.product?.price || 0);
       }, 0);
     }, 0) : 0;
+
+    const totalSales = sumOrdersSales(Array.isArray(ordersWithRevenue) ? ordersWithRevenue : []);
+    const todaySales = sumOrdersSales(
+      Array.isArray(todayOrdersWithProducts) ? todayOrdersWithProducts : [],
+    );
 
     const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
@@ -212,6 +252,12 @@ export class DashboardService {
         })) : [],
         recentOrders,
         recentRevenue
+      },
+      sales: {
+        totalSales,
+        todaySales,
+        totalOrders,
+        todayOrders: todayOrderCount,
       },
       clinics: {
         total: totalClinics,

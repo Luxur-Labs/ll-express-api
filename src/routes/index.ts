@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 import { healthController } from '../controllers/health.controller'; 
 import { getDoctorsListController } from '../controllers/user.controller';
-import { getDashboardController } from '../controllers/dashboard.controller';
+import { getDashboardController, exportTodayOrdersReportController } from '../controllers/dashboard.controller';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
 import { ADMIN_ROLES } from '../config/permissions';
 
@@ -26,6 +26,12 @@ router.get('/health', healthController);
 
 // Dashboard — all admin profiles
 router.get('/dashboard', authenticate, authorizeRoles(...adminRoles), getDashboardController);
+router.get(
+  '/dashboard/today-orders-report',
+  authenticate,
+  authorizeRoles(...adminRoles),
+  exportTodayOrdersReportController,
+);
 
 // Auth routes
 router.use('/auth', authRoutes);

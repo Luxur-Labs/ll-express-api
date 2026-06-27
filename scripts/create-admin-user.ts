@@ -28,8 +28,8 @@ function loadEnv(): void {
 async function main(): Promise<void> {
   loadEnv();
 
-  const email = process.env.EMAIL || 'admin@example.com';
-  const password = process.env.PASSWORD || 'admin@123';
+  const email = process.env.EMAIL || 'admin@luxur.com';
+  const password = process.env.PASSWORD || 'admin123';
   const rounds = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
   const passwordHash = await bcrypt.hash(password, rounds);
   const prisma = new PrismaClient();
@@ -41,12 +41,14 @@ async function main(): Promise<void> {
         passwordHash,
         role: 'SUPER_ADMIN',
         name: 'System Administrator',
+        isActive: true,
       },
       create: {
         email,
         passwordHash,
         role: 'SUPER_ADMIN',
         name: 'System Administrator',
+        isActive: true,
       },
     });
 

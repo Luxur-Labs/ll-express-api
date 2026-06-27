@@ -2,6 +2,7 @@ import { prisma } from '../utils/prisma';
 import { createUserStampFields, updateUserStampFields, userStampInclude } from '../utils/userStamps';
 import { writeAuditLog } from './auditLog.service';
 import { productSnapshot } from '../utils/auditSnapshot.util';
+import { ACTIVE_ENTITY_FILTER, withActiveOnly } from '../utils/softDelete.util';
 
 export interface CreateProductData {
   name: string;
@@ -55,6 +56,7 @@ export class ProductService {
 
   async getAllProducts() {
     return await prisma.product.findMany({
+      where: ACTIVE_ENTITY_FILTER,
       orderBy: { createdAt: 'desc' },
       include: userStampInclude,
     });
@@ -98,8 +100,9 @@ export class ProductService {
     if (!existing) {
       throw new Error('Product not found');
     }
-    const deleted = await prisma.product.delete({
+    const deleted = await prisma.product.update({
       where: { id },
+      data: { isActive: false, ...updateUserStampFields(actorUserId) },
     });
     await writeAuditLog({
       actorUserId,
@@ -108,6 +111,7 @@ export class ProductService {
       entityId: id,
       entityLabel: existing.name,
       before: productSnapshot(existing as unknown as Record<string, unknown>),
+      metadata: { softDelete: true },
     });
     return deleted;
   }
@@ -115,12 +119,12 @@ export class ProductService {
 
   async getProductsByPriceRange(minPrice: number, maxPrice: number) {
     return await prisma.product.findMany({
-      where: {
+      where: withActiveOnly({
         price: {
           gte: minPrice,
           lte: maxPrice,
         },
-      },
+      }),
       orderBy: { price: 'asc' },
     });
   }
@@ -128,7 +132,7 @@ export class ProductService {
   async getProductsList(page: number = 0, limit: number = 50, search?: string) {
     const safeLimit = Math.max(1, limit);
     const safePage = Math.max(0, page);
-    const where: any = {};
+    const where: any = { ...ACTIVE_ENTITY_FILTER };
 
     if (search && search.trim()) {
       const term = search.trim();

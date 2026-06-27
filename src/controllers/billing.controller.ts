@@ -160,6 +160,15 @@ export async function getBillingClinicSummaryController(req: Request, res: Respo
   }
 }
 
+export async function getBillingAllClinicsSummaryController(_req: Request, res: Response) {
+  try {
+    const data = await billingService.allClinicsBillingSummary();
+    return res.json(data);
+  } catch (e: any) {
+    return res.status(400).json({ message: e?.message || 'Summary load failed' });
+  }
+}
+
 export async function getBillingOverallSummaryController(_req: Request, res: Response) {
   try {
     const data = await billingService.overallSummary();

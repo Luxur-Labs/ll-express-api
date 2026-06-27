@@ -35,6 +35,8 @@ model User {
   lastLoginIp           String?
   /** When true, user must set a new password before using the app. */
   mustChangePassword    Boolean           @default(false)
+  /** When false, the account is revoked and cannot log in. */
+  isActive              Boolean           @default(true)
 
   // Profile fields
   dateOfBirth           DateTime?
@@ -68,6 +70,7 @@ model TechnicianGroup {
   id        String  @id @default(uuid())
   name      String  @unique
   description String?
+  isActive  Boolean @default(true)
   leaderId  String? @unique
   leader    User?   @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: SetNull)
   members   User[]  @relation("GroupMembers")
@@ -184,6 +187,7 @@ model Product {
   onPaperRate Decimal? @db.Decimal(10, 2)
   price       Decimal  @db.Decimal(10, 2)
   discount    Decimal  @db.Decimal(5, 2) @default(0)
+  isActive    Boolean  @default(true)
   
   // Relations
   orderProducts OrderProduct[]
@@ -202,6 +206,7 @@ model Patient {
   age           Int
   gender        String
   contactNumber String?
+  isActive      Boolean  @default(true)
   
   // Relations
   orders        Order[]
@@ -242,6 +247,7 @@ model Order {
   dateOfApproach  DateTime?
   status          String @default("NEW")
   applicationStatus String @default("NEW")
+  isActive        Boolean @default(true)
   
   // Relations
   orderProducts   OrderProduct[]

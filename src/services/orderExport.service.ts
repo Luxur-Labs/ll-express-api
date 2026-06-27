@@ -56,7 +56,7 @@ export class OrderExportService {
     format: ExportFormat,
     filters: OrderExportFilters = {},
   ): Promise<Buffer> {
-    const where: Prisma.OrderWhereInput = {};
+    const where: Prisma.OrderWhereInput = { isActive: true };
     if (filters.createdAtFrom || filters.createdAtTo) {
       where.createdAt = {};
       if (filters.createdAtFrom) {

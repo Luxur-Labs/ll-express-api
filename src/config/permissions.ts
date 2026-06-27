@@ -28,6 +28,12 @@ export type Permission =
 
 export const ADMIN_ROLES: AdminRole[] = ['SUPER_ADMIN', 'LAB_MANAGER', 'FRONT_OFFICE'];
 
+/** Roles that may be created via User Management (not SUPER_ADMIN). */
+export const CREATABLE_USER_ROLES = ['LAB_MANAGER', 'FRONT_OFFICE'] as const;
+
+/** Doctor and employee portal logins are disabled. */
+export const LOGIN_DISABLED_ROLES = ['DOCTOR', 'EMPLOYEE'] as const;
+
 export const PRODUCTION_ORDER_STATUSES = [
   'MODEL',
   'CAD',

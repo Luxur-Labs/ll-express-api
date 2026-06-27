@@ -67,6 +67,7 @@ export const PRODUCT_AUDIT_FIELDS = [
   'onPaperRate',
   'price',
   'discount',
+  'isActive',
 ] as const;
 
 export const ORDER_AUDIT_FIELDS = [
@@ -86,6 +87,7 @@ export const ORDER_AUDIT_FIELDS = [
   'dateOfApproach',
   'status',
   'applicationStatus',
+  'isActive',
 ] as const;
 
 export function clinicSnapshot(clinic: Record<string, unknown>) {

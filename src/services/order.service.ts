@@ -5,6 +5,7 @@ import { createUserStampFields, updateUserStampFields, userStampInclude } from '
 import { isCancelledOrderStatus } from '../utils/orderStatus';
 import { writeAuditLog } from './auditLog.service';
 import { orderSnapshot } from '../utils/auditSnapshot.util';
+import { ACTIVE_ENTITY_FILTER } from '../utils/softDelete.util';
 
 function numFromDecimal(d: Prisma.Decimal | null | undefined): number {
   if (d === null || d === undefined) return 0;
@@ -273,7 +274,9 @@ export class OrderService {
     }
 
     const productIds = [...new Set(data.orderProducts.map((p) => p.productId))];
-    const catalogRows = await prisma.product.findMany({ where: { id: { in: productIds } } });
+    const catalogRows = await prisma.product.findMany({
+      where: { id: { in: productIds }, isActive: true },
+    });
     if (catalogRows.length !== productIds.length) {
       throw new Error('One or more products were not found');
     }
@@ -452,7 +455,7 @@ export class OrderService {
     });
 
     // Convert Decimal fields to strings for JSON serialization
-    if (order) {
+    if (order && order.isActive) {
       const orderData = { ...order } as any;
       delete orderData.doctorName;
       const transitions = await formatTransitionsForApi(order.transitions ?? []);
@@ -463,7 +466,7 @@ export class OrderService {
       };
     }
 
-    return order;
+    return null;
   }
 
   async getOrderByInvoiceNumber(invoiceNumber: string) {
@@ -509,7 +512,7 @@ export class OrderService {
     });
 
     // Convert Decimal fields to strings for JSON serialization
-    if (order) {
+    if (order && order.isActive) {
       const orderData = { ...order } as any;
       delete orderData.doctorName;
       const transitions = await formatTransitionsForApi(order.transitions ?? []);
@@ -520,7 +523,7 @@ export class OrderService {
       };
     }
 
-    return order;
+    return null;
   }
 
   /**
@@ -590,7 +593,7 @@ export class OrderService {
     const skip = page * limit;
     
     // Build where clause
-    const whereClause: any = {};
+    const whereClause: any = { ...ACTIVE_ENTITY_FILTER };
     
     // Invoice number filter (contains, case-insensitive)
     if (filters.invoiceNumber) {
@@ -796,6 +799,7 @@ export class OrderService {
 
   async getAllOrders() {
     const orders = await prisma.order.findMany({
+      where: ACTIVE_ENTITY_FILTER,
       include: {
         patient: true,
         doctor: true,
@@ -918,7 +922,9 @@ export class OrderService {
         await prisma.orderProduct.deleteMany({ where: { orderId: id } });
       } else {
       const productIds = [...new Set(data.orderProducts.map((p) => p.productId))];
-      const catalogRows = await prisma.product.findMany({ where: { id: { in: productIds } } });
+      const catalogRows = await prisma.product.findMany({
+      where: { id: { in: productIds }, isActive: true },
+    });
       if (catalogRows.length !== productIds.length) {
         throw new Error('One or more products were not found');
       }
@@ -1158,18 +1164,23 @@ export class OrderService {
     const beforeSnapshot = await this.loadOrderAuditSnapshot(id);
     const existing = await prisma.order.findUnique({
       where: { id },
-      select: { invoiceNumber: true },
+      select: { invoiceNumber: true, isActive: true },
     });
-    const deleted = await prisma.order.delete({
+    if (!existing) {
+      throw new Error('Order not found');
+    }
+    const deleted = await prisma.order.update({
       where: { id },
+      data: { isActive: false, ...updateUserStampFields(actorUserId) },
     });
     await writeAuditLog({
       actorUserId,
       action: 'DELETE',
       entityType: 'Order',
       entityId: id,
-      entityLabel: existing?.invoiceNumber ?? id,
+      entityLabel: existing.invoiceNumber ?? id,
       before: beforeSnapshot ?? undefined,
+      metadata: { softDelete: true },
     });
     return deleted;
   }
