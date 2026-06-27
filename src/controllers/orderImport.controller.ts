@@ -1,8 +1,10 @@
 import { Request, Response } from 'express';
 
 import { orderImportService, OrderImportCommitItem } from '../services/orderImport.service';
+import { orderExportService } from '../services/orderExport.service';
 import type { AuthUser } from '../types/auth';
 import { prisma } from '../utils/prisma';
+import { parseExportFormat, sendSpreadsheetExport } from '../utils/spreadsheetExport.util';
 
 async function resolveImportedByEmail(user?: AuthUser): Promise<string | undefined> {
   if (user?.email) return user.email;
@@ -131,5 +133,24 @@ export async function listOrderImportHistoryController(req: Request, res: Respon
   } catch (error: unknown) {
     console.error('Order import history error:', error);
     return res.status(500).json({ message: 'Failed to load import history' });
+  }
+}
+
+export async function exportOrdersController(req: Request, res: Response) {
+  try {
+    const { format, createdAtFrom, createdAtTo } = req.query as {
+      format?: string;
+      createdAtFrom?: string;
+      createdAtTo?: string;
+    };
+    const exportFormat = parseExportFormat(format, 'xlsx');
+    const buffer = await orderExportService.exportImportFormat(exportFormat, {
+      createdAtFrom,
+      createdAtTo,
+    });
+    sendSpreadsheetExport(res, buffer, 'orders_export', exportFormat);
+  } catch (error: unknown) {
+    console.error('Order export error:', error);
+    return res.status(500).json({ message: 'Failed to export orders' });
   }
 }

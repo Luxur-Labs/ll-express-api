@@ -1,5 +1,7 @@
 import { prisma } from '../utils/prisma';
 import { createUserStampFields, updateUserStampFields, userStampInclude } from '../utils/userStamps';
+import { writeAuditLog } from './auditLog.service';
+import { productSnapshot } from '../utils/auditSnapshot.util';
 
 export interface CreateProductData {
   name: string;
@@ -21,7 +23,7 @@ export interface UpdateProductData {
 
 export class ProductService {
   async createProduct(data: CreateProductData, actorUserId?: string) {
-    return await prisma.product.create({
+    const created = await prisma.product.create({
       data: {
         name: data.name,
         code: data.code,
@@ -33,6 +35,15 @@ export class ProductService {
       },
       include: userStampInclude,
     });
+    await writeAuditLog({
+      actorUserId,
+      action: 'CREATE',
+      entityType: 'Product',
+      entityId: created.id,
+      entityLabel: created.name,
+      after: productSnapshot(created as unknown as Record<string, unknown>),
+    });
+    return created;
   }
 
   async getProductById(id: string) {
@@ -50,6 +61,12 @@ export class ProductService {
   }
 
   async updateProduct(id: string, data: UpdateProductData, actorUserId?: string) {
+    const existing = await prisma.product.findUnique({ where: { id } });
+    if (!existing) {
+      throw new Error('Product not found');
+    }
+    const before = productSnapshot(existing as unknown as Record<string, unknown>);
+
     const updateData: any = { ...updateUserStampFields(actorUserId) };
     
     if (data.name !== undefined) updateData.name = data.name;
@@ -59,17 +76,40 @@ export class ProductService {
     if (data.price !== undefined) updateData.price = data.price;
     if (data.discount !== undefined) updateData.discount = data.discount;
 
-    return await prisma.product.update({
+    const updated = await prisma.product.update({
       where: { id },
       data: updateData,
       include: userStampInclude,
     });
+    await writeAuditLog({
+      actorUserId,
+      action: 'UPDATE',
+      entityType: 'Product',
+      entityId: updated.id,
+      entityLabel: updated.name,
+      before,
+      after: productSnapshot(updated as unknown as Record<string, unknown>),
+    });
+    return updated;
   }
 
-  async deleteProduct(id: string) {
-    return await prisma.product.delete({
+  async deleteProduct(id: string, actorUserId?: string) {
+    const existing = await prisma.product.findUnique({ where: { id } });
+    if (!existing) {
+      throw new Error('Product not found');
+    }
+    const deleted = await prisma.product.delete({
       where: { id },
     });
+    await writeAuditLog({
+      actorUserId,
+      action: 'DELETE',
+      entityType: 'Product',
+      entityId: id,
+      entityLabel: existing.name,
+      before: productSnapshot(existing as unknown as Record<string, unknown>),
+    });
+    return deleted;
   }
 
 

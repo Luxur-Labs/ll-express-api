@@ -10,6 +10,7 @@ import {
   getProductsByPriceRangeController,
   getProductsListController,
   importProductsFileController,
+  exportProductsController,
 } from '../controllers/product.controller';
 import { authenticate, authorizePermissions, authorizeRoles } from '../middleware/auth.middleware';
 import { ADMIN_ROLES } from '../config/permissions';
@@ -28,6 +29,7 @@ const adminRoles = [...ADMIN_ROLES] as Parameters<typeof authorizeRoles>;
 router.use(authenticate);
 
 router.post('/import/file', authorizePermissions('products.import'), upload.single('file'), importProductsFileController);
+router.get('/export', authorizePermissions('products.import'), exportProductsController);
 
 router.get('/', authorizeRoles(...adminRoles), getAllProductsController);
 router.get('/list', authorizeRoles(...adminRoles), getProductsListController);

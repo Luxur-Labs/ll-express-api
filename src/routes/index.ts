@@ -16,6 +16,7 @@ import adminRoutes from './admin.routes';
 import authRoutes from './auth.routes';
 import orderTechnicianGroupRoutes from './orderTechnicianGroup.routes';
 import orderStatusRoutes from './orderStatus.routes';
+import auditLogRoutes from './auditLog.routes';
  
 const router = Router();
  
@@ -47,6 +48,7 @@ router.use('/clinics', clinicRoutes);
 router.use('/products', productRoutes);
 router.use('/patients', patientRoutes);
 router.use('/orders', orderRoutes);
+router.use('/audit-logs', auditLogRoutes);
 router.use('/billing', billingRoutes);
  
 export default router;

@@ -1,6 +1,8 @@
 import { prisma } from '../utils/prisma';
 import { Prisma } from '@prisma/client';
 import { createUserStampFields, updateUserStampFields, userStampInclude } from '../utils/userStamps';
+import { writeAuditLog } from './auditLog.service';
+import { clinicSnapshot } from '../utils/auditSnapshot.util';
 
 export class PendingBalanceLockedError extends Error {
   constructor() {
@@ -63,7 +65,16 @@ export class ClinicService {
       data: createData,
       include: userStampInclude,
     });
-    return { ...created, hasInvoices: false as const };
+    const result = { ...created, hasInvoices: false as const };
+    await writeAuditLog({
+      actorUserId,
+      action: 'CREATE',
+      entityType: 'Clinic',
+      entityId: created.id,
+      entityLabel: created.clinicName,
+      after: clinicSnapshot(created as unknown as Record<string, unknown>),
+    });
+    return result;
   }
 
   async getClinicById(id: string) {
@@ -91,6 +102,12 @@ export class ClinicService {
   }
 
   async updateClinic(id: string, data: UpdateClinicData, actorUserId?: string) {
+    const existing = await prisma.clinic.findUnique({ where: { id } });
+    if (!existing) {
+      throw new Error('Clinic not found');
+    }
+    const before = clinicSnapshot(existing as unknown as Record<string, unknown>);
+
     if (data.pendingBalance !== undefined && data.pendingBalance !== null) {
       const invoiceCount = await prisma.billingInvoice.count({ where: { clinicId: id } });
       if (invoiceCount > 0) {
@@ -112,7 +129,17 @@ export class ClinicService {
       include: userStampInclude,
     });
     const invoiceCount = await prisma.billingInvoice.count({ where: { clinicId: id } });
-    return { ...updated, hasInvoices: invoiceCount > 0 };
+    const result = { ...updated, hasInvoices: invoiceCount > 0 };
+    await writeAuditLog({
+      actorUserId,
+      action: 'UPDATE',
+      entityType: 'Clinic',
+      entityId: updated.id,
+      entityLabel: updated.clinicName,
+      before,
+      after: clinicSnapshot(updated as unknown as Record<string, unknown>),
+    });
+    return result;
   }
 
   async getClinicsByOrganization(organizationId: string) {
@@ -193,10 +220,25 @@ export class ClinicService {
    * Soft delete a clinic (set isActive to false)
    */
   async deleteClinic(id: string, actorUserId?: string) {
-    return await prisma.clinic.update({
+    const existing = await prisma.clinic.findUnique({ where: { id } });
+    if (!existing) {
+      throw new Error('Clinic not found');
+    }
+    const deleted = await prisma.clinic.update({
       where: { id },
       data: { isActive: false, ...updateUserStampFields(actorUserId) },
     });
+    await writeAuditLog({
+      actorUserId,
+      action: 'DELETE',
+      entityType: 'Clinic',
+      entityId: id,
+      entityLabel: existing.clinicName,
+      before: clinicSnapshot(existing as unknown as Record<string, unknown>),
+      after: clinicSnapshot(deleted as unknown as Record<string, unknown>),
+      metadata: { softDelete: true },
+    });
+    return deleted;
   }
 }
 

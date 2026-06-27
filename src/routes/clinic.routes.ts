@@ -10,6 +10,7 @@ import {
   getClinicsByOrganizationController,
   getClinicsListController,
   importClinicsFileController,
+  exportClinicsController,
 } from '../controllers/clinic.controller';
 import { authenticate, authorizePermissions, authorizeRoles } from '../middleware/auth.middleware';
 import { ADMIN_ROLES } from '../config/permissions';
@@ -28,6 +29,7 @@ const adminRoles = [...ADMIN_ROLES] as Parameters<typeof authorizeRoles>;
 router.use(authenticate);
 
 router.post('/import/file', authorizePermissions('clinics.import'), upload.single('file'), importClinicsFileController);
+router.get('/export', authorizePermissions('clinics.import'), exportClinicsController);
 
 router.get('/', authorizeRoles(...adminRoles), getAllClinicsController);
 router.get('/list', authorizeRoles(...adminRoles), getClinicsListController);

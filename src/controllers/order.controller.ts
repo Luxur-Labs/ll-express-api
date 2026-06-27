@@ -469,7 +469,7 @@ export async function deleteOrderController(req: Request, res: Response) {
       return res.status(404).json({ message: 'Order not found' });
     }
 
-    await orderService.deleteOrder(id);
+    await orderService.deleteOrder(id, getActorUserId(res));
     return res.status(204).send();
   } catch (error) {
     console.error('Error deleting order:', error);

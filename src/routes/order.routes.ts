@@ -37,6 +37,7 @@ import {
   previewOrderImportFileController,
   listOrderImportBatchItemsController,
   retryOrderImportItemController,
+  exportOrdersController,
 } from '../controllers/orderImport.controller';
 import {
   validateOrderImportSchema,
@@ -64,6 +65,7 @@ router.post('/import/items/:itemId/retry', authorizePermissions('orders.import')
 router.post('/import/validate', authorizePermissions('orders.import'), validate(validateOrderImportSchema), validateOrderImportController);
 router.post('/import', authorizePermissions('orders.import'), validate(commitOrderImportSchema), commitOrderImportController);
 router.get('/import/history', authorizePermissions('orders.import'), validate(listOrderImportHistorySchema), listOrderImportHistoryController);
+router.get('/export', authorizePermissions('orders.import'), exportOrdersController);
 
 // Read
 router.get('/', authorizeRoles(...adminRoles), getAllOrdersController);

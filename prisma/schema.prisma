@@ -396,4 +396,29 @@ model OrderImportBatchItem {
   @@index([orderId])
 }
 
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  STATUS_CHANGE
+}
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  userId      String?
+  userEmail   String?
+  userName    String?
+  action      AuditAction
+  entityType  String
+  entityId    String?
+  entityLabel String?
+  changes     Json?
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime    @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
 

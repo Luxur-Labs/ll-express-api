@@ -3,6 +3,8 @@ import { createOrderTransition } from '../utils/orderTransitions';
 import { prisma } from '../utils/prisma';
 import { createUserStampFields, updateUserStampFields, userStampInclude } from '../utils/userStamps';
 import { isCancelledOrderStatus } from '../utils/orderStatus';
+import { writeAuditLog } from './auditLog.service';
+import { orderSnapshot } from '../utils/auditSnapshot.util';
 
 function numFromDecimal(d: Prisma.Decimal | null | undefined): number {
   if (d === null || d === undefined) return 0;
@@ -198,6 +200,21 @@ export interface UpdateOrderData {
 }
 
 export class OrderService {
+  private async loadOrderAuditSnapshot(orderId: string) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        orderProducts: {
+          include: {
+            product: { select: { id: true, code: true, name: true } },
+          },
+        },
+      },
+    });
+    if (!order) return null;
+    return orderSnapshot(order as unknown as Record<string, unknown>);
+  }
+
   async createOrder(data: CreateOrderData, actorUserId?: string) {
     const isCancelled = isCancelledOrderStatus(data.status);
     const products = data.orderProducts ?? [];
@@ -376,6 +393,15 @@ export class OrderService {
       remarks: 'Order created',
     });
 
+    await writeAuditLog({
+      actorUserId,
+      action: 'CREATE',
+      entityType: 'Order',
+      entityId: order.id,
+      entityLabel: order.invoiceNumber,
+      after: orderSnapshot(order as unknown as Record<string, unknown>),
+    });
+
     return {
       ...order,
       orderProducts: order.orderProducts.map((op: any) => serializeOrderProduct(op)),
@@ -520,6 +546,13 @@ export class OrderService {
       toState: status,
       transitionedBy: userId,
       remarks: trimmed,
+    });
+    await writeAuditLog({
+      actorUserId: userId,
+      action: 'UPDATE',
+      entityType: 'Order',
+      entityId: orderId,
+      metadata: { activityNote: trimmed },
     });
     return this.getOrderById(orderId);
   }
@@ -807,6 +840,8 @@ export class OrderService {
   }
 
   async updateOrder(id: string, data: UpdateOrderData, transitionedBy?: string, remarks?: string) {
+    const beforeSnapshot = await this.loadOrderAuditSnapshot(id);
+
     // Get current order status before update
     const currentOrder = await prisma.order.findUnique({
       where: { id },
@@ -1098,16 +1133,45 @@ export class OrderService {
       });
     }
 
+    const afterSnapshot = orderSnapshot(updatedOrder as unknown as Record<string, unknown>);
+    const dataKeys = Object.keys(data).filter((k) => (data as Record<string, unknown>)[k] !== undefined);
+    const onlyStatusChange = dataKeys.length === 1 && dataKeys[0] === 'status';
+
+    await writeAuditLog({
+      actorUserId: transitionedBy,
+      action: onlyStatusChange ? 'STATUS_CHANGE' : 'UPDATE',
+      entityType: 'Order',
+      entityId: id,
+      entityLabel: updatedOrder.invoiceNumber,
+      before: beforeSnapshot ?? undefined,
+      after: afterSnapshot,
+      metadata: remarks ? { remarks } : undefined,
+    });
+
     return {
       ...updatedOrder,
       orderProducts: updatedOrder.orderProducts.map((op: any) => serializeOrderProduct(op)),
     };
   }
 
-  async deleteOrder(id: string) {
-    return await prisma.order.delete({
+  async deleteOrder(id: string, actorUserId?: string) {
+    const beforeSnapshot = await this.loadOrderAuditSnapshot(id);
+    const existing = await prisma.order.findUnique({
+      where: { id },
+      select: { invoiceNumber: true },
+    });
+    const deleted = await prisma.order.delete({
       where: { id },
     });
+    await writeAuditLog({
+      actorUserId,
+      action: 'DELETE',
+      entityType: 'Order',
+      entityId: id,
+      entityLabel: existing?.invoiceNumber ?? id,
+      before: beforeSnapshot ?? undefined,
+    });
+    return deleted;
   }
 
   private async generateOrderId() {

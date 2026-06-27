@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
 import { ProductService, CreateProductData, UpdateProductData } from '../services/product.service';
 import { productImportService } from '../services/productImport.service';
+import { productExportService } from '../services/productExport.service';
 import { getActorUserId } from '../utils/requestUser';
+import { parseExportFormat, sendSpreadsheetExport } from '../utils/spreadsheetExport.util';
 
 const productService = new ProductService();
 
@@ -134,7 +136,7 @@ export async function deleteProductController(req: Request, res: Response) {
       return res.status(404).json({ message: 'Product not found' });
     }
 
-    await productService.deleteProduct(id);
+    await productService.deleteProduct(id, getActorUserId(res));
     return res.status(204).send();
   } catch (error) {
     console.error('Error deleting product:', error);
@@ -200,5 +202,16 @@ export async function importProductsFileController(req: Request, res: Response) 
     console.error('Product import error:', error);
     const message = error instanceof Error ? error.message : 'Product import failed';
     return res.status(400).json({ message });
+  }
+}
+
+export async function exportProductsController(req: Request, res: Response) {
+  try {
+    const format = parseExportFormat(req.query.format, 'csv');
+    const buffer = await productExportService.exportImportFormat(format);
+    sendSpreadsheetExport(res, buffer, 'products_export', format);
+  } catch (error: unknown) {
+    console.error('Product export error:', error);
+    return res.status(500).json({ message: 'Failed to export products' });
   }
 }

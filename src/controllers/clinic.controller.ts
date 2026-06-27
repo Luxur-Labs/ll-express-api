@@ -8,7 +8,9 @@ import {
   UpdateClinicData,
 } from '../services/clinic.service';
 import { clinicImportService } from '../services/clinicImport.service';
+import { clinicExportService } from '../services/clinicExport.service';
 import { getActorUserId } from '../utils/requestUser';
+import { parseExportFormat, sendSpreadsheetExport } from '../utils/spreadsheetExport.util';
 
 const clinicService = new ClinicService();
 
@@ -185,5 +187,16 @@ export async function importClinicsFileController(req: Request, res: Response) {
     console.error('Clinic import error:', error);
     const message = error instanceof Error ? error.message : 'Clinic import failed';
     return res.status(400).json({ message });
+  }
+}
+
+export async function exportClinicsController(req: Request, res: Response) {
+  try {
+    const format = parseExportFormat(req.query.format, 'csv');
+    const buffer = await clinicExportService.exportImportFormat(format);
+    sendSpreadsheetExport(res, buffer, 'clinics_export', format);
+  } catch (error: unknown) {
+    console.error('Clinic export error:', error);
+    return res.status(500).json({ message: 'Failed to export clinics' });
   }
 }
