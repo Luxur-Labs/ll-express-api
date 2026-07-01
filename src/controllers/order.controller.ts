@@ -328,7 +328,10 @@ export async function updateOrderController(req: Request, res: Response) {
     }
 
     const updateData: UpdateOrderData = {};
-    if (invoiceNumber !== undefined) updateData.invoiceNumber = invoiceNumber;
+    if (invoiceNumber !== undefined) {
+      const trimmed = String(invoiceNumber).trim();
+      if (trimmed) updateData.invoiceNumber = trimmed;
+    }
     if (patientId !== undefined) updateData.patientId = patientId;
     if (patient !== undefined) {
       const patientAge =

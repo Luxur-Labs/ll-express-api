@@ -135,7 +135,10 @@ export const createOrderSchema = z.object({
 
 export const updateOrderSchema = z.object({
   body: z.object({
-    invoiceNumber: stringSchema('Invoice number is required', 255).optional(),
+    invoiceNumber: z.preprocess(
+      (val) => (val === null || val === undefined || val === '' ? undefined : val),
+      z.string().max(255, 'Invoice number too long').optional()
+    ),
     patientId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
     patient: patientDataSchema.optional(), // Support updating patient info directly
     doctorId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
