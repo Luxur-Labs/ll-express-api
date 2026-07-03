@@ -16,6 +16,7 @@ export class ClinicExportService {
       c.clinicName,
       c.contactNumber,
       c.clientAddress,
+      c.pendingBalance != null ? Number(c.pendingBalance.toString()) : '',
     ]);
 
     return buildSpreadsheetBuffer(CLINIC_IMPORT_HEADERS, rows, format, 'Clinics');

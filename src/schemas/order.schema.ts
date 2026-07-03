@@ -6,6 +6,8 @@ import { isCancelledOrderStatus } from '../utils/orderStatus';
 const ORDER_STATUSES = [
   'NEW',
   'MODEL',       // department
+  'THREE_D_MODEL',
+  'QC',
   'CAD',         // department
   'CAM',         // department
   'DMLS',        // department
@@ -59,6 +61,12 @@ const orderProductSchema = z.object({
       .max(100, 'Discount percent cannot exceed 100')
       .optional()
   ),
+  unitDiscounts: z
+    .record(
+      z.string(),
+      z.number().min(0, 'Unit discount cannot be negative').max(100, 'Unit discount cannot exceed 100'),
+    )
+    .optional(),
 });
 
 // Schema for update - allows ID to reference existing orderProduct
@@ -112,6 +120,10 @@ export const createOrderSchema = z.object({
     referenceName: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Reference name too long').optional()),
     partner: stringSchema('Partner is required', 255),
     estimateDate: z.preprocess((val) => val === null ? undefined : val, z.string().datetime('Invalid estimate date format')),
+    scanningMode: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Scanning mode too long').optional()),
+    schedule: z.preprocess((val) => val === null || val === '' ? undefined : val, z.string().datetime('Invalid schedule date format').optional()),
+    enterRemark: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
+    dateOfApproach: z.preprocess((val) => val === null || val === '' ? undefined : val, z.string().optional()),
     orderProducts: z.preprocess(
       (val) => (val === null || val === undefined ? [] : val),
       z.array(orderProductSchema)
@@ -217,6 +229,9 @@ export const ordersListQuerySchema = z.object({
     
     // Product code filter
     productCode: z.string().max(255, 'Product code too long').optional(),
+
+    // Order line type: New, Repeat, or Corrections (matches OrderProduct.repeatCorrections)
+    repeatCorrections: z.enum(['New', 'Repeat', 'Corrections']).optional(),
     
     // Name filters (searches by name, case-insensitive partial match)
     patientName: z.string().max(255, 'Patient name too long').optional(),

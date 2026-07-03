@@ -7,7 +7,7 @@ import {
   PendingBalanceLockedError,
   UpdateClinicData,
 } from '../services/clinic.service';
-import { clinicImportService } from '../services/clinicImport.service';
+import { clinicImportService, ClinicImportField, ClinicImportMatchBy } from '../services/clinicImport.service';
 import { clinicExportService } from '../services/clinicExport.service';
 import { getActorUserId } from '../utils/requestUser';
 import { parseExportFormat, sendSpreadsheetExport } from '../utils/spreadsheetExport.util';
@@ -174,13 +174,21 @@ export async function importClinicsFileController(req: Request, res: Response) {
     if (!file?.buffer?.length) {
       return res.status(400).json({ message: 'No file uploaded' });
     }
+
+    const matchBy = parseImportStringArray(req.body?.matchBy ?? req.query?.matchBy);
+    const updateFields = parseImportStringArray(req.body?.updateFields ?? req.query?.updateFields);
+
     const result = await clinicImportService.importFromFile(
       file.buffer,
       file.originalname,
       getActorUserId(res),
+      {
+        matchBy: matchBy as ClinicImportMatchBy[],
+        updateFields: updateFields as ClinicImportField[],
+      },
     );
     return res.status(200).json({
-      message: `Imported ${result.summary.created} created, ${result.summary.updated} updated`,
+      message: `Imported ${result.summary.created} created, ${result.summary.updated} updated, ${result.summary.skipped} skipped`,
       data: result,
     });
   } catch (error: unknown) {
@@ -188,6 +196,23 @@ export async function importClinicsFileController(req: Request, res: Response) {
     const message = error instanceof Error ? error.message : 'Clinic import failed';
     return res.status(400).json({ message });
   }
+}
+
+function parseImportStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v).trim()).filter(Boolean);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.map((v) => String(v).trim()).filter(Boolean);
+      }
+    } catch {
+      return value.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+  }
+  return [];
 }
 
 export async function exportClinicsController(req: Request, res: Response) {

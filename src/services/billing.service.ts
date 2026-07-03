@@ -2,6 +2,7 @@ import { Prisma, BillingPeriodType, BillingLedgerEntryType } from '@prisma/clien
 import { prisma } from '../utils/prisma';
 import { razorpayService } from './razorpay.service';
 import { countToothUnits } from '../utils/toothNumber.util';
+import { computeOrderProductLineBilling } from '../utils/orderSales.util';
 
 export const COMPANY_HEADER = {
   name: 'Izee Medical Laboratories Pvt Ltd',
@@ -123,6 +124,48 @@ export interface InvoiceLineDraft {
   sortOrder: number;
 }
 
+function invoiceLineFromOrderProduct(
+  op: {
+    id: string;
+    unitNumbers?: string | null;
+    unitPrice?: Prisma.Decimal | null;
+    discountPercent?: Prisma.Decimal | null;
+    unitDiscounts?: Prisma.JsonValue | null;
+    workType?: string | null;
+    product: { name: string; price: Prisma.Decimal; discount: Prisma.Decimal };
+  },
+  order: {
+    id: string;
+    invoiceNumber: string;
+    estimateDate: Date;
+    patient: { name: string };
+  },
+  sortOrder: number
+): InvoiceLineDraft {
+  const billing = computeOrderProductLineBilling({
+    unitNumbers: op.unitNumbers,
+    unitPrice: op.unitPrice,
+    discountPercent: op.discountPercent,
+    unitDiscounts: op.unitDiscounts,
+    product: op.product,
+  });
+  const desc = [op.product.name, op.workType].filter(Boolean).join(' — ') || op.product.name;
+  return {
+    orderId: order.id,
+    orderProductId: op.id,
+    voucherNo: order.invoiceNumber,
+    deliveryDate: order.estimateDate,
+    patientName: order.patient.name,
+    productDescription: desc,
+    toothNo: op.unitNumbers || '',
+    unit: billing.units,
+    ratePerUnit: billing.rate,
+    discountRate: billing.totalDiscountAmount,
+    lineTotal: billing.lineTotal,
+    sortOrder,
+  };
+}
+
 export class BillingService {
   /**
    * Order product lines already captured on a **non-cancelled** billing invoice for this clinic
@@ -199,31 +242,7 @@ export class BillingService {
           continue;
         }
         const opRow = op as any;
-        const unit = countUnits(op.unitNumbers);
-        const rate =
-          opRow.unitPrice != null ? toNumber(opRow.unitPrice) : toNumber(op.product.price);
-        const discountPct =
-          opRow.discountPercent != null
-            ? toNumber(opRow.discountPercent)
-            : toNumber(op.product.discount);
-        const gross = unit * rate;
-        const discountAmt = roundMoney((gross * discountPct) / 100);
-        const lineTotal = roundMoney(gross - discountAmt);
-        const desc = [op.product.name, op.workType].filter(Boolean).join(' — ') || op.product.name;
-        lines.push({
-          orderId: order.id,
-          orderProductId: op.id,
-          voucherNo: order.invoiceNumber,
-          deliveryDate: order.estimateDate,
-          patientName: order.patient.name,
-          productDescription: desc,
-          toothNo: op.unitNumbers || '',
-          unit,
-          ratePerUnit: rate,
-          discountRate: discountAmt,
-          lineTotal,
-          sortOrder: sortOrder++,
-        });
+        lines.push(invoiceLineFromOrderProduct(opRow, order, sortOrder++));
       }
     }
     return lines;
@@ -300,31 +319,7 @@ export class BillingService {
     let sortOrder = 0;
     for (const op of order.orderProducts) {
       const opRow = op as any;
-      const unit = countUnits(op.unitNumbers);
-      const rate =
-        opRow.unitPrice != null ? toNumber(opRow.unitPrice) : toNumber(op.product.price);
-      const discountPct =
-        opRow.discountPercent != null
-          ? toNumber(opRow.discountPercent)
-          : toNumber(op.product.discount);
-      const gross = unit * rate;
-      const discountAmt = roundMoney((gross * discountPct) / 100);
-      const lineTotal = roundMoney(gross - discountAmt);
-      const desc = [op.product.name, op.workType].filter(Boolean).join(' — ') || op.product.name;
-      lines.push({
-        orderId: order.id,
-        orderProductId: op.id,
-        voucherNo: order.invoiceNumber,
-        deliveryDate: order.estimateDate,
-        patientName: order.patient.name,
-        productDescription: desc,
-        toothNo: op.unitNumbers || '',
-        unit,
-        ratePerUnit: rate,
-        discountRate: discountAmt,
-        lineTotal,
-        sortOrder: sortOrder++,
-      });
+      lines.push(invoiceLineFromOrderProduct(opRow, order, sortOrder++));
     }
 
     if (!lines.length) {
@@ -532,31 +527,7 @@ export class BillingService {
           continue;
         }
         const opRow = op as any;
-        const unit = countUnits(op.unitNumbers);
-        const rate =
-          opRow.unitPrice != null ? toNumber(opRow.unitPrice) : toNumber(op.product.price);
-        const discountPct =
-          opRow.discountPercent != null
-            ? toNumber(opRow.discountPercent)
-            : toNumber(op.product.discount);
-        const gross = unit * rate;
-        const discountAmt = roundMoney((gross * discountPct) / 100);
-        const lineTotal = roundMoney(gross - discountAmt);
-        const desc = [op.product.name, op.workType].filter(Boolean).join(' — ') || op.product.name;
-        lines.push({
-          orderId: order.id,
-          orderProductId: op.id,
-          voucherNo: order.invoiceNumber,
-          deliveryDate: order.estimateDate,
-          patientName: order.patient.name,
-          productDescription: desc,
-          toothNo: op.unitNumbers || '',
-          unit,
-          ratePerUnit: rate,
-          discountRate: discountAmt,
-          lineTotal,
-          sortOrder: sortOrder++,
-        });
+        lines.push(invoiceLineFromOrderProduct(opRow, order, sortOrder++));
       }
     }
     return lines;

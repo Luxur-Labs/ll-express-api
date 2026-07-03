@@ -4,6 +4,7 @@ export const CLINIC_IMPORT_HEADERS = [
   'Clinic Name',
   'Doctor phone number',
   'Address',
+  'Pending Balance',
 ] as const;
 
 export const PRODUCT_IMPORT_HEADERS = [

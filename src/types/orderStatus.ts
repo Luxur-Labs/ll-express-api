@@ -6,6 +6,8 @@
 export enum OrderStatus {
   NEW = 'NEW',
   MODEL = 'MODEL',
+  THREE_D_MODEL = 'THREE_D_MODEL',
+  QC = 'QC',
   CAD = 'CAD',
   CAM = 'CAM',
   DMLS = 'DMLS',

@@ -36,6 +36,8 @@ export const LOGIN_DISABLED_ROLES = ['DOCTOR', 'EMPLOYEE'] as const;
 
 export const PRODUCTION_ORDER_STATUSES = [
   'MODEL',
+  'THREE_D_MODEL',
+  'QC',
   'CAD',
   'CAM',
   'DMLS',

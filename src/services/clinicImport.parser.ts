@@ -21,6 +21,11 @@ const HEADER_ALIASES: Record<string, string> = {
   'doctor name': 'doctorName',
   doctorname: 'doctorName',
   doctor: 'doctorName',
+  'pending balance': 'pendingBalance',
+  pendingbalance: 'pendingBalance',
+  balance: 'pendingBalance',
+  'opening balance': 'pendingBalance',
+  openingbalance: 'pendingBalance',
 };
 
 const MAX_DATA_ROWS = 5000;
@@ -31,6 +36,7 @@ export type ClinicImportSheetRow = {
   clientAddress?: string;
   contactNumber?: string;
   doctorName?: string;
+  pendingBalance?: string;
 };
 
 export type ClinicImportParseResult = {
@@ -68,6 +74,7 @@ function scoreHeaderRow(headers: string[]): number {
     if (key === 'clientAddress') score += 4;
     if (key === 'contactNumber') score += 4;
     if (key === 'doctorName') score += 3;
+    if (key === 'pendingBalance') score += 2;
   }
   return score;
 }
@@ -126,7 +133,10 @@ function parseWorksheet(sheet: XLSX.WorkSheet, sheetName: string): ClinicImportP
   const rows = jsonRows
     .slice(0, MAX_DATA_ROWS)
     .map((raw, idx) => mapRawRow(raw, headerRowIndex + idx + 2))
-    .filter((row) => !!(row.clinicName || row.clientAddress || row.contactNumber || row.doctorName));
+    .filter(
+      (row) =>
+        !!(row.clinicName || row.clientAddress || row.contactNumber || row.doctorName || row.pendingBalance),
+    );
 
   return {
     rows,
@@ -136,9 +146,39 @@ function parseWorksheet(sheet: XLSX.WorkSheet, sheetName: string): ClinicImportP
   };
 }
 
-export function hasClinicImportHeaders(headers: string[]): boolean {
-  const keys = new Set(headers.map((h) => resolveFieldKey(h)).filter(Boolean));
-  return keys.has('clinicName') && keys.has('clientAddress') && keys.has('contactNumber');
+export type ClinicImportField =
+  | 'doctorName'
+  | 'clinicName'
+  | 'clientAddress'
+  | 'contactNumber'
+  | 'pendingBalance';
+
+export type ClinicImportMatchBy = 'clinicName' | 'contactNumber';
+
+const MATCH_BY_LABELS: Record<ClinicImportMatchBy, string> = {
+  clinicName: 'Clinic Name',
+  contactNumber: 'Doctor phone number',
+};
+
+export function headerFieldKeys(headers: string[]): Set<string> {
+  return new Set(headers.map((h) => resolveFieldKey(h)).filter(Boolean));
+}
+
+/** Sheet must expose at least one column used to match existing clinics. */
+export function validateClinicImportHeaders(
+  headers: string[],
+  matchBy: ClinicImportMatchBy[],
+): string | null {
+  if (!matchBy.length) {
+    return 'Select at least one way to match existing clinics (clinic name or mobile number).';
+  }
+  const keys = headerFieldKeys(headers);
+  const hasMatchColumn = matchBy.some((m) => keys.has(m));
+  if (!hasMatchColumn) {
+    const labels = matchBy.map((m) => MATCH_BY_LABELS[m]).join(' or ');
+    return `Worksheet must include a column for: ${labels}. Found headers: ${headers.join(', ')}`;
+  }
+  return null;
 }
 
 export function parseClinicUploadBuffer(buffer: Buffer, fileName: string): ClinicImportParseResult {

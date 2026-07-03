@@ -263,7 +263,6 @@ function parseSheetText(text: string): ParseSheetResult {
   const delimiter = detectDelimiter(lines[0]);
   const headerRowIndex = findBestHeaderLineIndex(lines, delimiter);
   const headers = splitLine(lines[headerRowIndex], delimiter).filter((h) => h.trim().length > 0);
-  const fieldKeys = splitLine(lines[headerRowIndex], delimiter).map((h) => resolveFieldKey(h));
 
   const rows: OrderImportSheetRow[] = [];
   const dataLines = lines.slice(headerRowIndex + 1, headerRowIndex + 1 + MAX_DATA_ROWS);
@@ -273,9 +272,9 @@ function parseSheetText(text: string): ParseSheetResult {
     if (cells.every((c) => !c.trim())) continue;
 
     const raw: Record<string, unknown> = {};
-    fieldKeys.forEach((key, idx) => {
-      if (!key) return;
-      raw[key] = cells[idx]?.trim() ?? '';
+    headers.forEach((header, idx) => {
+      if (!header.trim()) return;
+      raw[header] = cells[idx]?.trim() ?? '';
     });
     rows.push(mapRawRow(raw, lineIndex + 1));
   }

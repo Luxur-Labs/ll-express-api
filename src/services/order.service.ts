@@ -6,17 +6,30 @@ import { isCancelledOrderStatus } from '../utils/orderStatus';
 import { writeAuditLog } from './auditLog.service';
 import { orderSnapshot } from '../utils/auditSnapshot.util';
 import { ACTIVE_ENTITY_FILTER } from '../utils/softDelete.util';
+import {
+  computeOrderProductLineBilling,
+  parseUnitDiscountsMap,
+  roundOrderMoney,
+} from '../utils/orderSales.util';
 
-function numFromDecimal(d: Prisma.Decimal | null | undefined): number {
-  if (d === null || d === undefined) return 0;
-  return typeof d === 'number' ? d : d.toNumber();
+function normalizeUnitDiscountsForDb(
+  input: unknown,
+): Prisma.InputJsonValue | undefined {
+  const map = parseUnitDiscountsMap(input);
+  return Object.keys(map).length > 0 ? map : undefined;
 }
 
 /** Persisted line price/discount; falls back to catalog when omitted (legacy clients). */
 function resolveLinePricing(
-  input: { unitPrice?: number | null; discountPercent?: number | null },
+  input: {
+    unitPrice?: number | null;
+    discountPercent?: number | null;
+  },
   catalog: { price: Prisma.Decimal; discount: Prisma.Decimal }
-): { unitPrice: Prisma.Decimal; discountPercent: Prisma.Decimal } {
+): {
+  unitPrice: Prisma.Decimal;
+  discountPercent: Prisma.Decimal;
+} {
   const u =
     input.unitPrice !== undefined && input.unitPrice !== null && Number.isFinite(Number(input.unitPrice))
       ? Number(input.unitPrice)
@@ -31,6 +44,11 @@ function resolveLinePricing(
     unitPrice: new Prisma.Decimal(u),
     discountPercent: new Prisma.Decimal(d),
   };
+}
+
+function numFromDecimal(d: Prisma.Decimal | null | undefined): number {
+  if (d === null || d === undefined) return 0;
+  return typeof d === 'number' ? d : d.toNumber();
 }
 
 type OrderTransitionRow = {
@@ -73,6 +91,19 @@ function serializeOrderProduct(op: any) {
   const linePrice = op.unitPrice != null ? op.unitPrice : op.product?.price;
   const lineDiscount =
     op.discountPercent != null ? op.discountPercent : op.product?.discount;
+  const billing = computeOrderProductLineBilling({
+    unitNumbers: op.unitNumbers,
+    unitPrice: op.unitPrice,
+    discountPercent: op.discountPercent,
+    unitDiscounts: op.unitDiscounts,
+    product: op.product
+      ? { price: op.product.price, discount: op.product.discount }
+      : null,
+  });
+
+  const unitDiscounts =
+    op.unitDiscounts != null ? parseUnitDiscountsMap(op.unitDiscounts) : null;
+
   return {
     ...op,
     // Backward-compatible keys used by some legacy UIs.
@@ -80,6 +111,13 @@ function serializeOrderProduct(op: any) {
     discount: lineDiscount != null ? lineDiscount.toString() : null,
     unitPrice: op.unitPrice != null ? op.unitPrice.toString() : null,
     discountPercent: op.discountPercent != null ? op.discountPercent.toString() : null,
+    unitDiscounts: unitDiscounts && Object.keys(unitDiscounts).length > 0 ? unitDiscounts : null,
+    unitCount: billing.units,
+    ratePerUnit: linePrice != null ? linePrice.toString() : null,
+    productDiscountAmount: billing.productDiscountAmount.toString(),
+    unitDiscountAmount: billing.unitDiscountAmount.toString(),
+    discountAmount: billing.totalDiscountAmount.toString(),
+    lineTotal: billing.lineTotal.toString(),
     product: op.product
       ? {
           ...op.product,
@@ -87,6 +125,28 @@ function serializeOrderProduct(op: any) {
           discount: op.product.discount.toString(),
         }
       : null,
+  };
+}
+
+function computeOrderTotalBill(orderProducts: Array<{ lineTotal?: string }>): number {
+  return roundOrderMoney(
+    orderProducts.reduce((sum, op) => sum + Number(op.lineTotal ?? 0), 0),
+  );
+}
+
+function serializeOrderProductListItem(op: any) {
+  const serialized = serializeOrderProduct(op);
+  return {
+    id: serialized.id,
+    productCode: serialized.product?.code ?? null,
+    productName: serialized.product?.name ?? null,
+    unitNumbers: serialized.unitNumbers ?? null,
+    unitCount: serialized.unitCount,
+    ratePerUnit: serialized.ratePerUnit,
+    discountPercent: serialized.discountPercent,
+    unitDiscounts: serialized.unitDiscounts,
+    discountAmount: serialized.discountAmount,
+    lineTotal: serialized.lineTotal,
   };
 }
 
@@ -107,6 +167,8 @@ export interface CreateOrderProductData {
   unitPrice?: number | null;
   /** Discount % on this line (optional; defaults from Product). */
   discountPercent?: number | null;
+  /** Per-tooth discount % keyed by tooth number (e.g. {"24": 10, "32": 5}). */
+  unitDiscounts?: Record<string, number> | null;
 }
 
 export interface UpdateOrderProductData extends CreateOrderProductData {
@@ -151,6 +213,8 @@ function normalizePatientData(patient: CreatePatientData) {
 export type OrderStatusType =
   | 'NEW'
   | 'MODEL'
+  | 'THREE_D_MODEL'
+  | 'QC'
   | 'CAD'
   | 'CAM'
   | 'DMLS'
@@ -201,6 +265,14 @@ export interface UpdateOrderData {
 }
 
 export class OrderService {
+  private static normalizeRepeatCorrectionsFilter(value: string): string {
+    const s = value.trim().toLowerCase();
+    if (s === 'repeat') return 'Repeat';
+    if (s === 'correction' || s === 'corrections') return 'Corrections';
+    if (s === 'new') return 'New';
+    return value.trim();
+  }
+
   private async loadOrderAuditSnapshot(orderId: string) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
@@ -305,9 +377,13 @@ export class OrderService {
           create: products.map((product) => {
             const prod = catalogById.get(product.productId)!;
             const { unitPrice, discountPercent } = resolveLinePricing(
-              { unitPrice: product.unitPrice, discountPercent: product.discountPercent },
+              {
+                unitPrice: product.unitPrice,
+                discountPercent: product.discountPercent,
+              },
               { price: prod.price, discount: prod.discount }
             );
+            const unitDiscounts = normalizeUnitDiscountsForDb(product.unitDiscounts);
             const productData: any = {
               productId: product.productId,
               shadeType: product.shadeType,
@@ -321,6 +397,9 @@ export class OrderService {
               unitPrice,
               discountPercent,
             };
+            if (unitDiscounts !== undefined) {
+              productData.unitDiscounts = unitDiscounts;
+            }
 
             // Only include optional fields if they're provided
             if (product.workType !== undefined) {
@@ -459,10 +538,13 @@ export class OrderService {
       const orderData = { ...order } as any;
       delete orderData.doctorName;
       const transitions = await formatTransitionsForApi(order.transitions ?? []);
+      const orderProducts = order.orderProducts.map((op: any) => serializeOrderProduct(op));
+      const totalBill = computeOrderTotalBill(orderProducts);
       return {
         ...orderData,
         transitions,
-        orderProducts: order.orderProducts.map((op: any) => serializeOrderProduct(op)),
+        orderProducts,
+        totalBill: totalBill.toString(),
       };
     }
 
@@ -516,10 +598,13 @@ export class OrderService {
       const orderData = { ...order } as any;
       delete orderData.doctorName;
       const transitions = await formatTransitionsForApi(order.transitions ?? []);
+      const orderProducts = order.orderProducts.map((op: any) => serializeOrderProduct(op));
+      const totalBill = computeOrderTotalBill(orderProducts);
       return {
         ...orderData,
         transitions,
-        orderProducts: order.orderProducts.map((op: any) => serializeOrderProduct(op)),
+        orderProducts,
+        totalBill: totalBill.toString(),
       };
     }
 
@@ -577,6 +662,7 @@ export class OrderService {
     partner?: string;
     scanningMode?: string;
     productCode?: string;
+    repeatCorrections?: string;
     scheduleFrom?: string;
     scheduleTo?: string;
     estimateDateFrom?: string;
@@ -672,18 +758,24 @@ export class OrderService {
       };
     }
     
-    // Product code filter (filters orders that have products with matching code)
-    if (filters.productCode) {
-      whereClause.orderProducts = {
-        some: {
-          product: {
-            code: {
-              contains: filters.productCode,
-              mode: 'insensitive',
-            },
+    // Product line filters (orders that have at least one matching order product)
+    if (filters.productCode || filters.repeatCorrections) {
+      const orderProductSome: Record<string, unknown> = {};
+      if (filters.productCode) {
+        orderProductSome.product = {
+          code: {
+            contains: filters.productCode,
+            mode: 'insensitive',
           },
-        },
-      };
+        };
+      }
+      if (filters.repeatCorrections) {
+        orderProductSome.repeatCorrections = {
+          equals: OrderService.normalizeRepeatCorrectionsFilter(filters.repeatCorrections),
+          mode: 'insensitive',
+        };
+      }
+      whereClause.orderProducts = { some: orderProductSome };
     }
     
     // Date range filters
@@ -756,6 +848,7 @@ export class OrderService {
                   name: true,
                   code: true,
                   price: true,
+                  discount: true,
                 }
               }
             }
@@ -768,26 +861,35 @@ export class OrderService {
 
     return {
       data: {
-        orders: (orders as any[]).map((order: any) => ({
-          id: order.id,
-          invoiceNumber: order.invoiceNumber,
-          status: order.status,
-          schedule: order.schedule ? order.schedule.getTime() : null,
-          estimateDate: order.estimateDate.getTime(),
-          dateOfApproach: order.dateOfApproach ? order.dateOfApproach.getTime() : null,
-          createdOn: order.createdAt.getTime(),
-          amount: order.orderProducts.reduce((sum: number, op: any) => {
-            const rate =
-              op.unitPrice != null ? Number(op.unitPrice) : Number(op.product?.price ?? 0);
-            return sum + rate;
-          }, 0),
-          assignedGroup: null,
-          orderProducts: order.orderProducts.map((op: any) => op.product.code || '').filter((code: string) => code).join(', '),
-          patientName: order.patient.name,
-          doctorName: (order.clinic as any).doctorName || null,
-          clinicName: order.clinic.clinicName,
-          referenceName: (order as any).referenceName || null,
-        })),
+        orders: (orders as any[]).map((order: any) => {
+          const orderProductLines = order.orderProducts.map((op: any) =>
+            serializeOrderProductListItem(op),
+          );
+          const totalBill = computeOrderTotalBill(
+            order.orderProducts.map((op: any) => serializeOrderProduct(op)),
+          );
+          return {
+            id: order.id,
+            invoiceNumber: order.invoiceNumber,
+            status: order.status,
+            schedule: order.schedule ? order.schedule.getTime() : null,
+            estimateDate: order.estimateDate.getTime(),
+            dateOfApproach: order.dateOfApproach ? order.dateOfApproach.getTime() : null,
+            createdOn: order.createdAt.getTime(),
+            amount: totalBill,
+            totalBill,
+            assignedGroup: null,
+            productDetails: orderProductLines
+              .map((op: { productCode?: string | null }) => op.productCode || '')
+              .filter((code: string) => code)
+              .join(', '),
+            orderProducts: orderProductLines,
+            patientName: order.patient.name,
+            doctorName: (order.clinic as any).doctorName || null,
+            clinicName: order.clinic.clinicName,
+            referenceName: (order as any).referenceName || null,
+          };
+        }),
         pagination: {
           page,
           limit,
@@ -954,11 +1056,15 @@ export class OrderService {
       const updateOperations = productsToUpdate.map((product) => {
         const prod = catalogById.get(product.productId)!;
         const { unitPrice, discountPercent } = resolveLinePricing(
-          { unitPrice: product.unitPrice, discountPercent: product.discountPercent },
+          {
+            unitPrice: product.unitPrice,
+            discountPercent: product.discountPercent,
+          },
           { price: prod.price, discount: prod.discount }
         );
-        const updateProductData: any = {
-          productId: product.productId,
+        const unitDiscounts = normalizeUnitDiscountsForDb(product.unitDiscounts);
+        const updateProductData: Prisma.OrderProductUpdateInput = {
+          product: { connect: { id: product.productId } },
           shadeType: product.shadeType,
           finishingInstructions: product.finishingInstructions,
           componentDetails: product.componentDetails,
@@ -970,6 +1076,11 @@ export class OrderService {
           unitPrice,
           discountPercent,
         };
+        if (unitDiscounts !== undefined) {
+          updateProductData.unitDiscounts = unitDiscounts;
+        } else {
+          updateProductData.unitDiscounts = Prisma.JsonNull;
+        }
 
         // Only include optional fields if they're provided
         if (product.workType !== undefined) {
@@ -995,9 +1106,13 @@ export class OrderService {
           create: productsToCreate.map((product) => {
             const prod = catalogById.get(product.productId)!;
             const { unitPrice, discountPercent } = resolveLinePricing(
-              { unitPrice: product.unitPrice, discountPercent: product.discountPercent },
+              {
+                unitPrice: product.unitPrice,
+                discountPercent: product.discountPercent,
+              },
               { price: prod.price, discount: prod.discount }
             );
+            const unitDiscounts = normalizeUnitDiscountsForDb(product.unitDiscounts);
             const productData: any = {
               productId: product.productId,
               shadeType: product.shadeType,
@@ -1011,6 +1126,9 @@ export class OrderService {
               unitPrice,
               discountPercent,
             };
+            if (unitDiscounts !== undefined) {
+              productData.unitDiscounts = unitDiscounts;
+            }
 
             // Only include optional fields if they're provided
             if (product.workType !== undefined) {

@@ -15,6 +15,8 @@ const orderService = new OrderService();
 const ORDER_STATUSES = [
   'NEW',
   'MODEL',
+  'THREE_D_MODEL',
+  'QC',
   'CAD',
   'CAM',
   'DMLS',
@@ -519,6 +521,8 @@ function normalizeStatus(v: unknown): string {
     DISPATCH: 'DISPATCHED',
     ADMIN: 'ADMIN_REVIEW',
     'ADMIN_REVIEW': 'ADMIN_REVIEW',
+    '3D_MODEL': 'THREE_D_MODEL',
+    '3D': 'THREE_D_MODEL',
   };
   if (aliases[s]) return aliases[s];
   const match = ORDER_STATUSES.find((st) => st === s);
