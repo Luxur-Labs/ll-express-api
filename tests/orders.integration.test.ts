@@ -183,6 +183,67 @@ describe('Orders API flow', () => {
     expect(ids).toContain(orderId);
   });
 
+  it('DELETE /orders/:id soft-deletes for SUPER_ADMIN', async () => {
+    const res = await request(app)
+      .delete(`/api/v1/orders/${orderId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(204);
+
+    const row = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { isActive: true },
+    });
+    expect(row?.isActive).toBe(false);
+
+    const list = await request(app)
+      .get('/api/v1/orders/list')
+      .query({ orderId, limit: '10', page: '0' })
+      .set('Authorization', `Bearer ${token}`);
+    const ids = (list.body.data?.orders ?? []).map((o: { id: string }) => o.id);
+    expect(ids).not.toContain(orderId);
+
+    const getOne = await request(app)
+      .get(`/api/v1/orders/${orderId}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(getOne.status).toBe(404);
+  });
+
+  it('DELETE /orders/:id is forbidden for LAB_MANAGER', async () => {
+    const passwordHash = await bcrypt.hash('manager123', 10);
+    const email = `lab-manager-delete-${Date.now()}@example.com`;
+    await prisma.user.create({
+      data: { email, passwordHash, role: 'LAB_MANAGER' },
+    });
+    const login = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email, password: 'manager123' });
+    const managerToken = login.body.token as string;
+
+    const body = buildCreateOrderBody({ clinicId, productId });
+    await request(app)
+      .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${token}`)
+      .send(body);
+    const created = await prisma.order.findFirst({
+      where: { clinicId, patient: { name: body.patient.name } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    expect(created).toBeTruthy();
+    const tempOrderId = created!.id;
+
+    const res = await request(app)
+      .delete(`/api/v1/orders/${tempOrderId}`)
+      .set('Authorization', `Bearer ${managerToken}`);
+    expect(res.status).toBe(403);
+
+    await prisma.orderProduct.deleteMany({ where: { orderId: tempOrderId } });
+    await prisma.orderTransition.deleteMany({ where: { orderId: tempOrderId } });
+    await prisma.order.deleteMany({ where: { id: tempOrderId } });
+    await prisma.user.delete({ where: { email } });
+  });
+
   it('POST /orders/import/preview parses uploaded spreadsheet', async () => {
     const csv = [
       'Order id,Patient Name,Clinic Name,Expected Date,Case Status,Shade,Product Code,Tooth number,Partner',

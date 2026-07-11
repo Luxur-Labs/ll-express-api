@@ -32,6 +32,7 @@ describe('Health and Auth', () => {
       .send({ email: 'admin@example.com', password: 'admin123' });
     expect(res.status).toBe(200);
     expect(res.body.token).toBeTruthy();
+    expect(res.body.refreshToken).toBeTruthy();
   });
 
   it('GET /auth/me returns user with token', async () => {

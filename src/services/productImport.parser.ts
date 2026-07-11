@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { normalizeProductCode } from '../utils/productCode.util';
 
 const HEADER_ALIASES: Record<string, string> = {
   'product code': 'code',
@@ -90,7 +91,9 @@ function mapRawRow(raw: Record<string, unknown>, rowIndex: number): ProductImpor
       const n = parseNumber(val);
       if (n !== undefined) (row as Record<string, unknown>)[key] = n;
     } else if (key === 'code' || key === 'name') {
-      const s = String(val ?? '').trim();
+      const s = key === 'code'
+        ? normalizeProductCode(val)
+        : String(val ?? '').trim();
       if (s) (row as Record<string, unknown>)[key] = s;
     }
   }

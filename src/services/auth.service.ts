@@ -13,18 +13,27 @@ export interface LoginPayload {
   employeeType?: EmployeeType | null;
   technicianGroup?: TechnicianGroup | null;
   mustChangePassword?: boolean;
+  tokenVersion?: number;
 }
 
 export function signToken(payload: LoginPayload) {
   const secret: Secret = env.JWT_SECRET;
   const options: SignOptions = { expiresIn: env.JWT_EXPIRES_IN as any };
-  return jwt.sign(payload as unknown as JwtPayload, secret, options);
+  return jwt.sign(
+    { ...payload, tokenVersion: payload.tokenVersion ?? 0 } as unknown as JwtPayload,
+    secret,
+    options
+  );
 }
 
-export function verifyToken(token: string): AuthUser {
+export interface VerifiedToken extends AuthUser {
+  tokenVersion?: number;
+}
+
+export function verifyToken(token: string): VerifiedToken {
   const secret: Secret = env.JWT_SECRET;
-  const decoded = jwt.verify(token, secret) as JwtPayload;
-  return decoded as AuthUser;
+  const decoded = jwt.verify(token, secret) as JwtPayload & { tokenVersion?: number };
+  return decoded as VerifiedToken;
 }
 
 export async function forgotPasswordInitiate(email: string) {

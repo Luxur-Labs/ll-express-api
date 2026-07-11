@@ -49,6 +49,8 @@ export interface DashboardMetrics {
     }>;
     recentOrders: number; // Last 30 days
     recentRevenue: number; // Last 30 days
+    repeatCount: number;
+    correctionsCount: number;
   };
   sales: {
     totalSales: number;
@@ -88,6 +90,8 @@ export class DashboardService {
       ordersByPartner,
       ordersByScanningMode,
       recentOrders,
+      repeatOrdersCount,
+      correctionsOrdersCount,
       totalClinics,
       recentClinics,
       totalPatients,
@@ -149,6 +153,18 @@ export class DashboardService {
       }).catch(() => []), // Handle empty results
       prisma.order.count({
         where: { ...ACTIVE_ENTITY_FILTER, createdAt: { gte: thirtyDaysAgo } },
+      }),
+      prisma.order.count({
+        where: {
+          ...ACTIVE_ENTITY_FILTER,
+          orderProducts: { some: { repeatCorrections: 'Repeat' } },
+        },
+      }),
+      prisma.order.count({
+        where: {
+          ...ACTIVE_ENTITY_FILTER,
+          orderProducts: { some: { repeatCorrections: 'Corrections' } },
+        },
       }),
 
       // Clinic counts
@@ -251,7 +267,9 @@ export class DashboardService {
           count: o._count.scanningMode
         })) : [],
         recentOrders,
-        recentRevenue
+        recentRevenue,
+        repeatCount: repeatOrdersCount,
+        correctionsCount: correctionsOrdersCount,
       },
       sales: {
         totalSales,

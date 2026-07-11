@@ -34,6 +34,10 @@ export const CREATABLE_USER_ROLES = ['LAB_MANAGER', 'FRONT_OFFICE'] as const;
 /** Doctor and employee portal logins are disabled. */
 export const LOGIN_DISABLED_ROLES = ['DOCTOR', 'EMPLOYEE'] as const;
 
+export function isApiAccessRole(role: Role): boolean {
+  return !(LOGIN_DISABLED_ROLES as readonly string[]).includes(role);
+}
+
 export const PRODUCTION_ORDER_STATUSES = [
   'MODEL',
   'THREE_D_MODEL',

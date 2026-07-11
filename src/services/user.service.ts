@@ -2,6 +2,7 @@ import { Role } from '../types/auth';
 import { uploadToCdn } from '../utils/cdn';
 
 import { hashPassword } from '../utils/password';
+import { invalidateUserSessions } from './session.service';
 import { prisma } from '../utils/prisma';
 import { ACTIVE_ENTITY_FILTER } from '../utils/softDelete.util';
 
@@ -134,7 +135,11 @@ export async function updateUser(id: string, input: Partial<{
     }
   }
 
-  return prisma.user.update({ where: { id }, data });
+  const updated = await prisma.user.update({ where: { id }, data });
+  if (typeof input.password === 'string') {
+    await invalidateUserSessions(id);
+  }
+  return updated;
 }
 
 export async function revokeUser(id: string) {
@@ -148,6 +153,7 @@ export async function revokeUser(id: string) {
   if (!existing.isActive) {
     return existing;
   }
+  await invalidateUserSessions(id);
   return prisma.user.update({
     where: { id },
     data: { isActive: false },

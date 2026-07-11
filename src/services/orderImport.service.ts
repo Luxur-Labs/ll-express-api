@@ -7,6 +7,7 @@ import {
   parseUploadBuffer,
 } from './orderImport.parser';
 import { isCancelledOrderStatus } from '../utils/orderStatus';
+import { normalizeProductCode, productCodeLookupKey } from '../utils/productCode.util';
 import { normalizeToothNumberString } from '../utils/toothNumber.util';
 
 const prisma = new PrismaClient();
@@ -358,26 +359,26 @@ function buildProductDraftsFromGroupRows(
   return rows.map((row) => {
     const pErrors: string[] = [];
     const pMissing: string[] = [];
-    const code = trimVal(row.productCode);
+    const code = normalizeProductCode(row.productCode);
     const shade = trimVal(row.shade);
     let productId: string | undefined;
 
     if (opts.forToothUpdate) {
       if (!code) pMissing.push('productCode');
       else {
-        const prod = productByCode.get(code.toLowerCase());
+        const prod = productByCode.get(productCodeLookupKey(code));
         if (!prod) pErrors.push(`Product code not found: "${code}"`);
         else productId = prod.id;
       }
     } else if (!opts.isCancelled) {
       if (!code) pMissing.push('productCode');
       else {
-        const prod = productByCode.get(code.toLowerCase());
+        const prod = productByCode.get(productCodeLookupKey(code));
         if (!prod) pErrors.push(`Product code not found: "${code}"`);
         else productId = prod.id;
       }
     } else if (code) {
-      const prod = productByCode.get(code.toLowerCase());
+      const prod = productByCode.get(productCodeLookupKey(code));
       if (prod) productId = prod.id;
     }
 
@@ -628,12 +629,15 @@ export class OrderImportService {
 
     const products = await prisma.product.findMany({
       select: { id: true, code: true, name: true },
+      orderBy: { updatedAt: 'desc' },
     });
-    const productByCode = new Map(
-      products
-        .filter((p) => p.code)
-        .map((p) => [trimVal(p.code).toLowerCase(), p])
-    );
+    const productByCode = new Map<string, ProductCatalogRow>();
+    for (const p of products) {
+      if (!p.code) continue;
+      const key = productCodeLookupKey(p.code);
+      if (!key || productByCode.has(key)) continue;
+      productByCode.set(key, p);
+    }
 
     const existingOrderIds = [...new Set(rows.map((r) => trimVal(r.orderId)).filter(Boolean))];
     const existingOrders =
@@ -928,7 +932,8 @@ export class OrderImportService {
 
     const queuesByCode = new Map<string, typeof existing.orderProducts>();
     for (const op of existing.orderProducts) {
-      const code = trimVal(op.product.code).toLowerCase();
+      const code = productCodeLookupKey(op.product.code);
+      if (!code) continue;
       if (!queuesByCode.has(code)) queuesByCode.set(code, []);
       queuesByCode.get(code)!.push(op);
     }
@@ -938,7 +943,7 @@ export class OrderImportService {
     for (const importLine of order.products) {
       if (!importLine.toothNumber) continue;
 
-      const code = trimVal(importLine.productCode).toLowerCase();
+      const code = productCodeLookupKey(importLine.productCode);
       let target = code ? queuesByCode.get(code)?.shift() : undefined;
       if (!target && unmatchedByPosition.length > 0) {
         target = unmatchedByPosition.shift();

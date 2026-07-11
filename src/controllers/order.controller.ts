@@ -454,7 +454,7 @@ export async function updateOrderStatusController(req: Request, res: Response) {
     const updatedOrder = await orderService.updateOrder(
       id,
       updateData,
-      (req as any).user?.id,
+      getActorUserId(res),
       remarks || `Order status updated to ${status}`
     );
 
@@ -476,15 +476,12 @@ export async function deleteOrderController(req: Request, res: Response) {
       return res.status(400).json({ message: 'Order ID is required' });
     }
 
-    // Check if order exists
-    const existingOrder = await orderService.getOrderById(id);
-    if (!existingOrder) {
-      return res.status(404).json({ message: 'Order not found' });
-    }
-
     await orderService.deleteOrder(id, getActorUserId(res));
     return res.status(204).send();
   } catch (error) {
+    if (error instanceof Error && error.message === 'Order not found') {
+      return res.status(404).json({ message: 'Order not found' });
+    }
     console.error('Error deleting order:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }

@@ -6,7 +6,7 @@ const router = Router();
 
 // Apply authentication and authorization to all routes
 router.use(authenticate);
-router.use(authorizeRoles('SUPER_ADMIN', 'DOCTOR', 'EMPLOYEE'));
+router.use(authorizeRoles('SUPER_ADMIN', 'LAB_MANAGER', 'FRONT_OFFICE'));
 
 // Get transitions for a specific order
 router.get('/order/:orderId', getOrderTransitionsController);

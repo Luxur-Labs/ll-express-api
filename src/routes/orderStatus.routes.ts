@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, authorizePermissions, authorizeRoles } from '../middleware/auth.middleware';
+import { ADMIN_ROLES } from '../config/permissions';
 import {
   updateOrderStatusController,
   createOrderTransitionController,
@@ -9,43 +10,42 @@ import {
 } from '../controllers/orderStatus.controller';
 
 const router = Router();
+const adminRoles = [...ADMIN_ROLES] as Parameters<typeof authorizeRoles>;
 
-// All routes require authentication
 router.use(authenticate);
 
-/**
- * @route GET /api/v1/order-status/info
- * @desc Get available statuses and transitions
- * @access Private
- */
-router.get('/info', getStatusInfoController);
+router.get(
+  '/info',
+  authorizeRoles(...adminRoles),
+  authorizePermissions('orders.view'),
+  getStatusInfoController,
+);
 
-/**
- * @route GET /api/v1/order-status/orders
- * @desc Get orders filtered by application status
- * @access Private
- */
-router.get('/orders', getOrdersByStatusController);
+router.get(
+  '/orders',
+  authorizeRoles(...adminRoles),
+  authorizePermissions('orders.view'),
+  getOrdersByStatusController,
+);
 
-/**
- * @route GET /api/v1/order-status/orders/:orderId
- * @desc Get order with both application status and transition history
- * @access Private
- */
-router.get('/orders/:orderId', getOrderWithStatusController);
+router.get(
+  '/orders/:orderId',
+  authorizeRoles(...adminRoles),
+  authorizePermissions('orders.view'),
+  getOrderWithStatusController,
+);
 
-/**
- * @route PUT /api/v1/order-status/orders/:orderId/status
- * @desc Update order status (application level)
- * @access Private
- */
-router.put('/orders/:orderId/status', updateOrderStatusController);
+router.put(
+  '/orders/:orderId/status',
+  authorizeRoles(...adminRoles),
+  updateOrderStatusController,
+);
 
-/**
- * @route POST /api/v1/order-status/orders/:orderId/transition
- * @desc Create order transition (database level)
- * @access Private
- */
-router.post('/orders/:orderId/transition', createOrderTransitionController);
+router.post(
+  '/orders/:orderId/transition',
+  authorizeRoles(...adminRoles),
+  authorizePermissions('orders.status.production'),
+  createOrderTransitionController,
+);
 
 export default router;

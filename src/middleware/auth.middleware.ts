@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 
 import { verifyToken } from '../services/auth.service';
 import { Role, EmployeeType, TechnicianGroup, AuthUser } from '../types/auth';
-import { hasAnyPermission, Permission } from '../config/permissions';
+import { hasAnyPermission, Permission, LOGIN_DISABLED_ROLES } from '../config/permissions';
 import { prisma } from '../utils/prisma';
 
 export async function authenticate(req: Request, res: Response, next: NextFunction) {
@@ -26,12 +26,27 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     const user = verifyToken(token);
     const dbUser = await prisma.user.findUnique({
       where: { id: user.id },
-      select: { isActive: true },
+      select: { isActive: true, tokenVersion: true },
     });
     if (!dbUser || dbUser.isActive === false) {
       return res.status(403).json({
         message: 'This account has been revoked. Contact your administrator.',
         code: 'ACCOUNT_REVOKED',
+      });
+    }
+
+    const tokenVersion = user.tokenVersion ?? 0;
+    if (tokenVersion !== dbUser.tokenVersion) {
+      return res.status(401).json({
+        message: 'Your session is no longer valid. Please sign in again.',
+        code: 'SESSION_INVALIDATED',
+      });
+    }
+
+    if ((LOGIN_DISABLED_ROLES as readonly string[]).includes(user.role)) {
+      return res.status(403).json({
+        message: 'This account type is no longer supported. Contact your administrator.',
+        code: 'ROLE_LOGIN_DISABLED',
       });
     }
 
@@ -51,7 +66,10 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     }
 
     next();
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token expired', code: 'TOKEN_EXPIRED' });
+    }
     return res.status(401).json({ message: 'Invalid token' });
   }
 }

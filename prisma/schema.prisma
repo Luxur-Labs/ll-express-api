@@ -37,6 +37,8 @@ model User {
   mustChangePassword    Boolean           @default(false)
   /** When false, the account is revoked and cannot log in. */
   isActive              Boolean           @default(true)
+  /** Incremented to invalidate all outstanding access tokens (password change, revoke). */
+  tokenVersion          Int               @default(0)
 
   // Profile fields
   dateOfBirth           DateTime?
@@ -55,9 +57,24 @@ model User {
   patientsUpdated       Patient[]         @relation("PatientUpdatedBy")
   ordersCreated         Order[]           @relation("OrderCreatedBy")
   ordersUpdated         Order[]           @relation("OrderUpdatedBy")
+  refreshTokens         RefreshToken[]
   
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model EmployeeType {

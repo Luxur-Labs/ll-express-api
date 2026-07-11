@@ -6,6 +6,7 @@ import {
   parseProductUploadBuffer,
   ProductImportSheetRow,
 } from './productImport.parser';
+import { normalizeProductCode, productCodeLookupKey } from '../utils/productCode.util';
 
 export type ProductImportRowResult = {
   rowIndex: number;
@@ -31,8 +32,8 @@ export type ProductImportResult = {
   items: ProductImportRowResult[];
 };
 
-function trimCode(v?: string): string {
-  return (v ?? '').trim();
+function normalizeCode(v?: string): string {
+  return normalizeProductCode(v);
 }
 
 function validateRow(row: ProductImportSheetRow): { ok: true; data: {
@@ -42,8 +43,8 @@ function validateRow(row: ProductImportSheetRow): { ok: true; data: {
   price: number;
   discount: number;
 } } | { ok: false; message: string } {
-  const code = trimCode(row.code);
-  const name = trimCode(row.name);
+  const code = normalizeCode(row.code);
+  const name = (row.name ?? '').trim();
   const price = row.price != null ? Number(row.price) : NaN;
   const discount = row.discount != null ? Number(row.discount) : 0;
   const onPaperRate = row.onPaperRate != null ? Number(row.onPaperRate) : undefined;
@@ -86,12 +87,15 @@ export class ProductImportService {
 
     const existing = await prisma.product.findMany({
       select: { id: true, code: true },
+      orderBy: { updatedAt: 'desc' },
     });
-    const byCode = new Map(
-      existing
-        .filter((p) => p.code)
-        .map((p) => [trimCode(p.code!).toLowerCase(), p.id])
-    );
+    const byCode = new Map<string, string>();
+    for (const p of existing) {
+      if (!p.code) continue;
+      const key = productCodeLookupKey(p.code);
+      if (!key || byCode.has(key)) continue;
+      byCode.set(key, p.id);
+    }
 
     const items: ProductImportRowResult[] = [];
     let created = 0;
@@ -114,7 +118,8 @@ export class ProductImportService {
       }
 
       const { code, name, onPaperRate, price, discount } = validated.data;
-      const existingId = byCode.get(code.toLowerCase());
+      const codeKey = productCodeLookupKey(code);
+      const existingId = byCode.get(codeKey);
 
       try {
         if (existingId) {
@@ -126,6 +131,7 @@ export class ProductImportService {
               onPaperRate: onPaperRate ?? null,
               price,
               discount,
+              isActive: true,
               ...updateUserStampFields(actorUserId),
             },
           });
@@ -142,7 +148,7 @@ export class ProductImportService {
               ...createUserStampFields(actorUserId),
             },
           });
-          byCode.set(code.toLowerCase(), createdProduct.id);
+          byCode.set(codeKey, createdProduct.id);
           created++;
           items.push({ rowIndex: row.rowIndex, code, name, status: 'CREATED' });
         }

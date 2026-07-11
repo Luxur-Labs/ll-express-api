@@ -1279,7 +1279,6 @@ export class OrderService {
   }
 
   async deleteOrder(id: string, actorUserId?: string) {
-    const beforeSnapshot = await this.loadOrderAuditSnapshot(id);
     const existing = await prisma.order.findUnique({
       where: { id },
       select: { invoiceNumber: true, isActive: true },
@@ -1287,6 +1286,10 @@ export class OrderService {
     if (!existing) {
       throw new Error('Order not found');
     }
+    if (!existing.isActive) {
+      return existing;
+    }
+    const beforeSnapshot = await this.loadOrderAuditSnapshot(id);
     const deleted = await prisma.order.update({
       where: { id },
       data: { isActive: false, ...updateUserStampFields(actorUserId) },

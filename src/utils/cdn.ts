@@ -35,7 +35,7 @@ export async function uploadToCdn(input: UploadInput): Promise<string> {
     Key: fileName,
     Body: input.buffer,
     ContentType: input.mimetype,
-    ACL: 'public-read', // Make file publicly accessible
+    ...(env.S3_OBJECT_ACL === 'public-read' ? { ACL: 'public-read' as const } : {}),
   });
 
   await s3Client.send(command);

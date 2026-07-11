@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import { updateOrderStatus, createOrderTransition, getOrderWithStatus, getOrdersByStatus } from '../services/orderStatus.service';
 import { OrderStatus, OrderTransitionStatus } from '../types/orderStatus';
+import { AuthUser } from '../types/auth';
+import { canChangeOrderStatus } from '../config/permissions';
+import { getActorUserId } from '../utils/requestUser';
 
 /**
  * Update order status (application level)
@@ -9,7 +12,7 @@ export async function updateOrderStatusController(req: Request, res: Response) {
   try {
     const { orderId } = req.params;
     const { status, remarks } = req.body;
-    const userId = (req as any).user?.id; // From auth middleware
+    const user = res.locals.user as AuthUser | undefined;
 
     if (!orderId) {
       return res.status(400).json({ message: 'Order ID is required' });
@@ -22,10 +25,14 @@ export async function updateOrderStatusController(req: Request, res: Response) {
       });
     }
 
+    if (!user || !canChangeOrderStatus(user.role, status)) {
+      return res.status(403).json({ message: 'You are not allowed to set this order status' });
+    }
+
     const result = await updateOrderStatus({
       orderId,
       status,
-      updatedBy: userId,
+      updatedBy: getActorUserId(res),
       remarks
     });
 
@@ -35,7 +42,6 @@ export async function updateOrderStatusController(req: Request, res: Response) {
         orderId: result.order.id,
         applicationStatus: result.applicationStatus,
         databaseStatus: result.databaseStatus,
-        // Note: No transition created since status and transitions are independent
       }
     });
   } catch (error) {
@@ -54,7 +60,6 @@ export async function createOrderTransitionController(req: Request, res: Respons
   try {
     const { orderId } = req.params;
     const { fromTransition, toTransition, remarks } = req.body;
-    const userId = (req as any).user?.id; // From auth middleware
 
     if (!orderId) {
       return res.status(400).json({ message: 'Order ID is required' });
@@ -71,7 +76,7 @@ export async function createOrderTransitionController(req: Request, res: Respons
       orderId,
       fromTransition,
       toTransition,
-      transitionedBy: userId,
+      transitionedBy: getActorUserId(res),
       remarks
     });
 
@@ -87,7 +92,6 @@ export async function createOrderTransitionController(req: Request, res: Respons
           remarks: result.transition.remarks,
           createdAt: result.transition.createdAt.getTime()
         }
-        // Note: No applicationStatus here since transitions don't affect it
       }
     });
   } catch (error) {
