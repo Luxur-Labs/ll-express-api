@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isCancelledOrderStatus } from '../utils/orderStatus';
+import { requiresEnterReason } from '../utils/orderProductFields';
 
 // All available order statuses (department stages + lifecycle)
 // Departments: MODEL, CAD, CAM, DMLS
@@ -31,7 +32,7 @@ const stringSchema = (message: string, maxLength?: number) => {
   );
 };
 
-const orderProductSchema = z.object({
+const orderProductBaseSchema = z.object({
   productId: stringSchema('Product ID is required'),
   workType: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Work type too long').optional()),
   workSpecification: z.preprocess((val) => val === null ? undefined : val, z.string().max(500, 'Work specification too long').optional()),
@@ -45,7 +46,18 @@ const orderProductSchema = z.object({
   occlusalStaining: stringSchema('Occlusal staining is required', 100),
   ponticDesign: stringSchema('Pontic design is required', 100),
   repeatCorrections: stringSchema('Repeat corrections is required', 500),
-  enterReason: stringSchema('Enter reason is required', 500),
+  enterReason: z.preprocess(
+    (val) => (val === null || val === undefined ? '' : val),
+    z.string().max(500, 'Enter reason too long'),
+  ),
+  notes: z.preprocess(
+    (val) => {
+      if (val === null || val === undefined) return undefined;
+      const trimmed = String(val).trim();
+      return trimmed === '' ? undefined : trimmed;
+    },
+    z.string().max(2000, 'Notes too long').optional(),
+  ),
   unitNumbers: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Unit numbers too long').optional()),
   // Line-level pricing (optional): when omitted, backend defaults from Product table.
   unitPrice: z.preprocess(
@@ -69,10 +81,27 @@ const orderProductSchema = z.object({
     .optional(),
 });
 
+function refineOrderProductReason(
+  product: z.infer<typeof orderProductBaseSchema>,
+  ctx: z.RefinementCtx,
+): void {
+  if (requiresEnterReason(product.repeatCorrections) && !String(product.enterReason ?? '').trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Enter reason is required when Repeat/Corrections is Repeat or Corrections',
+      path: ['enterReason'],
+    });
+  }
+}
+
+const orderProductSchema = orderProductBaseSchema.superRefine(refineOrderProductReason);
+
 // Schema for update - allows ID to reference existing orderProduct
-const updateOrderProductSchema = orderProductSchema.extend({
-  id: z.string().optional(), // ID of existing orderProduct to update
-});
+const updateOrderProductSchema = orderProductBaseSchema
+  .extend({
+    id: z.string().optional(), // ID of existing orderProduct to update
+  })
+  .superRefine(refineOrderProductReason);
 
 const fileSchema = z.object({
   fileName: z.string().min(1, 'File name is required').max(255, 'File name too long'),

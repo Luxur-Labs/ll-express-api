@@ -539,7 +539,7 @@ function resolveRawCaseStatus(groupRows: OrderImportSheetRow[]): string {
 }
 
 function defaultEnterReason(repeat: string): string {
-  return repeat === 'New' ? '-' : '';
+  return '';
 }
 
 function productDefaults(repeat: string, column1: string, componentReduction: string) {

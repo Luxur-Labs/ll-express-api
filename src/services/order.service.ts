@@ -3,6 +3,10 @@ import { createOrderTransition } from '../utils/orderTransitions';
 import { prisma } from '../utils/prisma';
 import { createUserStampFields, updateUserStampFields, userStampInclude } from '../utils/userStamps';
 import { isCancelledOrderStatus } from '../utils/orderStatus';
+import {
+  getOrderProductValidationError,
+  normalizeEnterReason,
+} from '../utils/orderProductFields';
 import { writeAuditLog } from './auditLog.service';
 import { orderSnapshot } from '../utils/auditSnapshot.util';
 import { ACTIVE_ENTITY_FILTER } from '../utils/softDelete.util';
@@ -150,6 +154,11 @@ function serializeOrderProductListItem(op: any) {
   };
 }
 
+function normalizeProductNotes(notes: unknown): string | null {
+  const trimmed = String(notes ?? '').trim();
+  return trimmed === '' ? null : trimmed;
+}
+
 export interface CreateOrderProductData {
   productId: string;
   workType?: string;
@@ -162,6 +171,7 @@ export interface CreateOrderProductData {
   ponticDesign: string;
   repeatCorrections: string;
   enterReason: string;
+  notes?: string | null;
   unitNumbers?: string;
   /** Unit price charged on this line (optional; defaults from Product). */
   unitPrice?: number | null;
@@ -298,12 +308,9 @@ export class OrderService {
       }
 
       for (const product of products) {
-        if (!product.productId || !product.shadeType ||
-            !product.finishingInstructions ||
-            product.componentDetails === undefined || product.componentDetails === null ||
-            !product.incaseOfAllAbutments || !product.occlusalStaining || !product.ponticDesign ||
-            !product.repeatCorrections || !product.enterReason) {
-          throw new Error('Each order product must have all required fields: productId, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason');
+        const productError = getOrderProductValidationError(product);
+        if (productError) {
+          throw new Error(productError);
         }
       }
     }
@@ -393,7 +400,8 @@ export class OrderService {
               occlusalStaining: product.occlusalStaining,
               ponticDesign: product.ponticDesign,
               repeatCorrections: product.repeatCorrections,
-              enterReason: product.enterReason,
+              enterReason: normalizeEnterReason(product.repeatCorrections, product.enterReason),
+              notes: normalizeProductNotes(product.notes),
               unitPrice,
               discountPercent,
             };
@@ -1072,7 +1080,8 @@ export class OrderService {
           occlusalStaining: product.occlusalStaining,
           ponticDesign: product.ponticDesign,
           repeatCorrections: product.repeatCorrections,
-          enterReason: product.enterReason,
+          enterReason: normalizeEnterReason(product.repeatCorrections, product.enterReason),
+          notes: normalizeProductNotes(product.notes),
           unitPrice,
           discountPercent,
         };
@@ -1122,7 +1131,8 @@ export class OrderService {
               occlusalStaining: product.occlusalStaining,
               ponticDesign: product.ponticDesign,
               repeatCorrections: product.repeatCorrections,
-              enterReason: product.enterReason,
+              enterReason: normalizeEnterReason(product.repeatCorrections, product.enterReason),
+              notes: normalizeProductNotes(product.notes),
               unitPrice,
               discountPercent,
             };

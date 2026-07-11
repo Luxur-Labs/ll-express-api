@@ -301,6 +301,7 @@ model OrderProduct {
   ponticDesign          String
   repeatCorrections     String
   enterReason           String
+  notes                 String?
   unitNumbers           String?
   /** Agreed unit price for this line (defaults from Product.price when null). */
   unitPrice             Decimal? @db.Decimal(12, 2)

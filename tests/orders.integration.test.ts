@@ -65,7 +65,32 @@ describe('Orders API flow', () => {
   });
 
   it('POST /orders creates order with all header and line fields', async () => {
-    const body = buildCreateOrderBody({ clinicId, productId });
+    const body = buildCreateOrderBody({
+      clinicId,
+      productId,
+      overrides: {
+        orderProducts: [
+          {
+            productId,
+            shadeType: 'A1',
+            finishingInstructions: 'High polish',
+            componentDetails: 'Ti base',
+            incaseOfAllAbutments: 'Separate',
+            occlusalStaining: 'Light',
+            ponticDesign: 'Ovate',
+            repeatCorrections: 'New',
+            enterReason: '',
+            workType: 'Crown',
+            workSpecification: 'Full contour',
+            unitNumbers: '24,32',
+            unitPrice: 1000,
+            discountPercent: 10,
+            unitDiscounts: { '24': 10, '32': 20 },
+            notes: 'Integration test line note',
+          },
+        ],
+      },
+    });
     const res = await request(app)
       .post('/api/v1/orders')
       .set('Authorization', `Bearer ${token}`)
@@ -98,6 +123,7 @@ describe('Orders API flow', () => {
     expect(line.workType).toBe('Crown');
     expect(line.unitNumbers).toContain('24');
     expect(line.unitDiscounts).toEqual({ '24': 10, '32': 20 });
+    expect(line.notes).toBe('Integration test line note');
 
     const billing = computeOrderProductLineBilling({
       unitNumbers: line.unitNumbers,
@@ -107,6 +133,34 @@ describe('Orders API flow', () => {
       product: { price: 1200, discount: 5 },
     });
     expect(billing.lineTotal).toBeGreaterThan(0);
+  });
+
+  it('POST /orders accepts New products without enterReason', async () => {
+    const body = buildCreateOrderBody({ clinicId, productId });
+    body.patient.name = `New Product Patient ${Date.now()}`;
+    body.orderProducts[0].repeatCorrections = 'New';
+    body.orderProducts[0].enterReason = '';
+
+    const res = await request(app)
+      .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${token}`)
+      .send(body);
+
+    expect(res.status).toBe(201);
+
+    const created = await prisma.order.findFirst({
+      where: { clinicId, patient: { name: body.patient.name } },
+      orderBy: { createdAt: 'desc' },
+      include: { orderProducts: true },
+    });
+    expect(created?.orderProducts[0].repeatCorrections).toBe('New');
+    expect(created?.orderProducts[0].enterReason).toBe('');
+
+    if (created) {
+      await prisma.orderProduct.deleteMany({ where: { orderId: created.id } });
+      await prisma.orderTransition.deleteMany({ where: { orderId: created.id } });
+      await prisma.order.deleteMany({ where: { id: created.id } });
+    }
   });
 
   it('GET /orders/:id returns persisted order with billing fields', async () => {
@@ -142,6 +196,7 @@ describe('Orders API flow', () => {
             ponticDesign: 'Modified ridge lap',
             repeatCorrections: 'Repeat',
             enterReason: 'Repeat case',
+            notes: 'Updated line note',
             workType: 'Bridge',
             workSpecification: 'Updated spec',
             unitNumbers: '14,23',
@@ -159,6 +214,7 @@ describe('Orders API flow', () => {
     const line = res.body.orderProducts[0];
     expect(line.shadeType).toBe('B2');
     expect(line.repeatCorrections).toBe('Repeat');
+    expect(line.notes).toBe('Updated line note');
     expect(line.unitDiscounts).toEqual({ '14': 50, '23': 20 });
   });
 

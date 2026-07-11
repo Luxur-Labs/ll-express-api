@@ -39,6 +39,24 @@ describe('order.schema', () => {
       expect(result.success).toBe(true);
     });
 
+    it('allows New order products without enterReason', () => {
+      const result = createOrderSchema.safeParse({
+        body: validCreateBody({
+          orderProducts: [validProduct({ repeatCorrections: 'New', enterReason: '' })],
+        }),
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('requires enterReason for Repeat order products', () => {
+      const result = createOrderSchema.safeParse({
+        body: validCreateBody({
+          orderProducts: [validProduct({ repeatCorrections: 'Repeat', enterReason: '' })],
+        }),
+      });
+      expect(result.success).toBe(false);
+    });
+
     it('requires patient name, clinic, partner, estimateDate, and order products', () => {
       const missing = createOrderSchema.safeParse({
         body: {
@@ -50,6 +68,27 @@ describe('order.schema', () => {
         },
       });
       expect(missing.success).toBe(false);
+    });
+
+    it('accepts optional product notes', () => {
+      const result = createOrderSchema.safeParse({
+        body: validCreateBody({
+          orderProducts: [validProduct({ notes: 'Shade match upper centrals' })],
+        }),
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.body.orderProducts[0].notes).toBe('Shade match upper centrals');
+      }
+    });
+
+    it('rejects product notes longer than 2000 characters', () => {
+      const result = createOrderSchema.safeParse({
+        body: validCreateBody({
+          orderProducts: [validProduct({ notes: 'x'.repeat(2001) })],
+        }),
+      });
+      expect(result.success).toBe(false);
     });
 
     it('allows cancelled orders without products', () => {
@@ -125,10 +164,18 @@ describe('order.schema', () => {
           schedule: '2026-06-20T10:00:00.000Z',
           enterRemark: 'Updated remark',
           dateOfApproach: '2026-06-10T10:00:00.000Z',
-          orderProducts: [validProduct({ id: '44444444-4444-4444-4444-444444444444' })],
+          orderProducts: [
+            validProduct({
+              id: '44444444-4444-4444-4444-444444444444',
+              notes: 'Update schema line note',
+            }),
+          ],
         },
       });
       expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.body.orderProducts?.[0]?.notes).toBe('Update schema line note');
+      }
     });
 
     it('accepts patient patch on update', () => {

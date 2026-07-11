@@ -5,6 +5,7 @@ import { canChangeOrderStatus, canUpdateOrder } from '../config/permissions';
 import type { AuthUser } from '../types/auth';
 import { getActorUserId } from '../utils/requestUser';
 import { isCancelledOrderStatus } from '../utils/orderStatus';
+import { getOrderProductValidationError } from '../utils/orderProductFields';
 
 const orderService = new OrderService();
 
@@ -66,12 +67,9 @@ export async function createOrderController(req: Request, res: Response) {
     // Validate each order product (skipped for cancelled orders with no lines)
     if (!cancelled) {
     for (const product of products) {
-      if (!product.productId || !product.shadeType || !product.finishingInstructions ||
-          product.componentDetails === undefined || product.componentDetails === null || !product.incaseOfAllAbutments || !product.occlusalStaining ||
-          !product.ponticDesign || !product.repeatCorrections || !product.enterReason) {
-        return res.status(400).json({
-          message: 'Each order product must have all required fields: productId, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason'
-        });
+      const productError = getOrderProductValidationError(product);
+      if (productError) {
+        return res.status(400).json({ message: productError });
       }
     }
     }
@@ -311,12 +309,9 @@ export async function updateOrderController(req: Request, res: Response) {
         });
       }
       for (const product of orderProducts) {
-        if (!product.productId || !product.shadeType || !product.finishingInstructions ||
-            product.componentDetails === undefined || product.componentDetails === null || !product.incaseOfAllAbutments || !product.occlusalStaining ||
-            !product.ponticDesign || !product.repeatCorrections || !product.enterReason) {
-          return res.status(400).json({
-            message: 'Each order product must have all required fields: productId, shadeType, finishingInstructions, componentDetails, incaseOfAllAbutments, occlusalStaining, ponticDesign, repeatCorrections, enterReason'
-          });
+        const productError = getOrderProductValidationError(product);
+        if (productError) {
+          return res.status(400).json({ message: productError });
         }
       }
     }
