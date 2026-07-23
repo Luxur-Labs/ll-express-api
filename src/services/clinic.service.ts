@@ -154,8 +154,19 @@ export class ClinicService {
     return rows.map((row) => withHasInvoices(row));
   }
 
-  async getClinicsList(page: number = 0, limit: number = 50, search?: string) {
-    const safeLimit = Math.max(1, limit);
+  /**
+   * Paginated clinic list.
+   * - default: management payload (stamps, balance, invoice flags)
+   * - options: lean dropdown payload for order creation / billing selectors
+   */
+  async getClinicsList(
+    page: number = 0,
+    limit: number = 50,
+    search?: string,
+    fields: 'full' | 'options' = 'full',
+  ) {
+    const maxLimit = fields === 'options' ? 1000 : 500;
+    const safeLimit = Math.min(Math.max(1, limit), maxLimit);
     const safePage = Math.max(0, page);
     const where: any = { isActive: true };
 
@@ -175,6 +186,33 @@ export class ClinicService {
     if (skip >= total) {
       return {
         data: [],
+        pagination: {
+          page: safePage,
+          limit: safeLimit,
+          total,
+        },
+      };
+    }
+
+    if (fields === 'options') {
+      // Lean fields only: enough for clinic autocomplete + order create autofill.
+      const options = await prisma.clinic.findMany({
+        where,
+        select: {
+          id: true,
+          clinicName: true,
+          organizationId: true,
+          clientAddress: true,
+          contactNumber: true,
+          doctorName: true,
+        },
+        orderBy: { clinicName: 'asc' },
+        skip,
+        take: safeLimit,
+      });
+
+      return {
+        data: options,
         pagination: {
           page: safePage,
           limit: safeLimit,

@@ -159,8 +159,9 @@ export async function getClinicsListController(req: Request, res: Response) {
     const page = Number(req.query.page) || 0;
     const limit = Number(req.query.limit) || 50;
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+    const fields = req.query.fields === 'options' ? 'options' : 'full';
 
-    const clinics = await clinicService.getClinicsList(page, limit, search);
+    const clinics = await clinicService.getClinicsList(page, limit, search, fields);
     return res.json(clinics);
   } catch (error) {
     console.error('Error fetching clinics list:', error);
