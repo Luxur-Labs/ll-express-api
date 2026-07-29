@@ -56,6 +56,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       const relativePath = req.path;
       const allowed =
         (req.method === 'POST' && relativePath === '/change-password') ||
+        (req.method === 'POST' && relativePath === '/clinic/set-password') ||
         (req.method === 'POST' && relativePath === '/logout');
       if (!allowed) {
         return res.status(403).json({

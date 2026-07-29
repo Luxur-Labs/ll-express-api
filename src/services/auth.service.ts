@@ -14,6 +14,7 @@ export interface LoginPayload {
   technicianGroup?: TechnicianGroup | null;
   mustChangePassword?: boolean;
   tokenVersion?: number;
+  clinicId?: string;
 }
 
 export function signToken(payload: LoginPayload) {

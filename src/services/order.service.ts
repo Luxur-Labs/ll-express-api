@@ -138,6 +138,46 @@ function computeOrderTotalBill(orderProducts: Array<{ lineTotal?: string }>): nu
   );
 }
 
+function productDetailsSortKey(orderProducts: Array<{ product?: { code?: string | null } | null }>): string {
+  return orderProducts
+    .map((op) => op.product?.code || '')
+    .filter((code) => code)
+    .join(', ')
+    .toLowerCase();
+}
+
+/** Prisma orderBy for list columns that map to Order scalars or relations. */
+function buildOrdersListPrismaOrderBy(
+  sortBy: string,
+  sortOrder: 'asc' | 'desc',
+): Prisma.OrderOrderByWithRelationInput {
+  switch (sortBy) {
+    case 'id':
+      return { id: sortOrder };
+    case 'invoiceNumber':
+      return { invoiceNumber: sortOrder };
+    case 'status':
+      return { status: sortOrder };
+    case 'schedule':
+      return { schedule: sortOrder };
+    case 'estimateDate':
+      return { estimateDate: sortOrder };
+    case 'dateOfApproach':
+      return { dateOfApproach: sortOrder };
+    case 'patientName':
+      return { patient: { name: sortOrder } };
+    case 'doctorName':
+      return { clinic: { doctorName: sortOrder } };
+    case 'clinicName':
+      return { clinic: { clinicName: sortOrder } };
+    case 'createdAt':
+    default:
+      return { createdAt: sortOrder };
+  }
+}
+
+const COMPUTED_ORDER_LIST_SORTS = new Set(['totalBill', 'productDetails']);
+
 function serializeOrderProductListItem(op: any) {
   const serialized = serializeOrderProduct(op);
   return {
@@ -828,40 +868,108 @@ export class OrderService {
       ];
     }
     
-    // Build orderBy clause
+    // Build orderBy / fetch strategy
     const sortBy = filters.sortBy || 'createdAt';
     const sortOrder = filters.sortOrder || 'desc';
-    const orderBy: any = {};
-    orderBy[sortBy] = sortOrder;
-    
+    const listInclude = {
+      patient: {
+        select: { name: true },
+      },
+      doctor: {
+        select: { name: true },
+      },
+      clinic: {
+        select: { clinicName: true, doctorName: true } as any,
+      },
+      orderProducts: {
+        include: {
+          product: {
+            select: {
+              name: true,
+              code: true,
+              price: true,
+              discount: true,
+            },
+          },
+        },
+      },
+    };
+
+    const mapOrderListItem = (order: any) => {
+      const orderProductLines = order.orderProducts.map((op: any) =>
+        serializeOrderProductListItem(op),
+      );
+      const totalBill = computeOrderTotalBill(
+        order.orderProducts.map((op: any) => serializeOrderProduct(op)),
+      );
+      return {
+        id: order.id,
+        invoiceNumber: order.invoiceNumber,
+        status: order.status,
+        schedule: order.schedule ? order.schedule.getTime() : null,
+        estimateDate: order.estimateDate.getTime(),
+        dateOfApproach: order.dateOfApproach ? order.dateOfApproach.getTime() : null,
+        createdOn: order.createdAt.getTime(),
+        amount: totalBill,
+        totalBill,
+        assignedGroup: null,
+        productDetails: orderProductLines
+          .map((op: { productCode?: string | null }) => op.productCode || '')
+          .filter((code: string) => code)
+          .join(', '),
+        orderProducts: orderProductLines,
+        patientName: order.patient.name,
+        doctorName: (order.clinic as any).doctorName || null,
+        clinicName: order.clinic.clinicName,
+        referenceName: (order as any).referenceName || null,
+      };
+    };
+
+    // Computed columns (total bill / product codes) are sorted in the API after fetch.
+    if (COMPUTED_ORDER_LIST_SORTS.has(sortBy)) {
+      const orders = (await prisma.order.findMany({
+        where: whereClause,
+        include: listInclude,
+      })) as any[];
+
+      orders.sort((a: any, b: any) => {
+        if (sortBy === 'totalBill') {
+          const aTotal = computeOrderTotalBill(
+            a.orderProducts.map((op: any) => serializeOrderProduct(op)),
+          );
+          const bTotal = computeOrderTotalBill(
+            b.orderProducts.map((op: any) => serializeOrderProduct(op)),
+          );
+          return sortOrder === 'asc' ? aTotal - bTotal : bTotal - aTotal;
+        }
+        const aKey = productDetailsSortKey(a.orderProducts);
+        const bKey = productDetailsSortKey(b.orderProducts);
+        const cmp = aKey.localeCompare(bKey);
+        return sortOrder === 'asc' ? cmp : -cmp;
+      });
+
+      const total = orders.length;
+      const pageOrders = orders.slice(skip, skip + limit);
+      return {
+        data: {
+          orders: pageOrders.map(mapOrderListItem),
+          pagination: {
+            page,
+            limit,
+            total,
+          },
+        },
+      };
+    }
+
+    const orderBy = buildOrdersListPrismaOrderBy(sortBy, sortOrder);
+
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where: whereClause,
         skip,
         take: limit,
-        include: {
-          patient: {
-            select: { name: true },
-          },
-          doctor: {
-            select: { name: true },
-          },
-          clinic: {
-            select: { clinicName: true, doctorName: true } as any,
-          },
-          orderProducts: {
-            include: {
-              product: {
-                select: {
-                  name: true,
-                  code: true,
-                  price: true,
-                  discount: true,
-                }
-              }
-            }
-          },
-        },
+        include: listInclude,
         orderBy,
       }) as any,
       prisma.order.count({ where: whereClause }),
@@ -869,35 +977,7 @@ export class OrderService {
 
     return {
       data: {
-        orders: (orders as any[]).map((order: any) => {
-          const orderProductLines = order.orderProducts.map((op: any) =>
-            serializeOrderProductListItem(op),
-          );
-          const totalBill = computeOrderTotalBill(
-            order.orderProducts.map((op: any) => serializeOrderProduct(op)),
-          );
-          return {
-            id: order.id,
-            invoiceNumber: order.invoiceNumber,
-            status: order.status,
-            schedule: order.schedule ? order.schedule.getTime() : null,
-            estimateDate: order.estimateDate.getTime(),
-            dateOfApproach: order.dateOfApproach ? order.dateOfApproach.getTime() : null,
-            createdOn: order.createdAt.getTime(),
-            amount: totalBill,
-            totalBill,
-            assignedGroup: null,
-            productDetails: orderProductLines
-              .map((op: { productCode?: string | null }) => op.productCode || '')
-              .filter((code: string) => code)
-              .join(', '),
-            orderProducts: orderProductLines,
-            patientName: order.patient.name,
-            doctorName: (order.clinic as any).doctorName || null,
-            clinicName: order.clinic.clinicName,
-            referenceName: (order as any).referenceName || null,
-          };
-        }),
+        orders: (orders as any[]).map(mapOrderListItem),
         pagination: {
           page,
           limit,

@@ -46,6 +46,28 @@ function countToothUnits(unitNumbers: string | null | undefined): number | '' {
   return parts.length || '';
 }
 
+/** Parse YYYY-MM-DD as local calendar start-of-day (avoids UTC shift). */
+function parseYmdLocalStart(ymd: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd).trim());
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0);
+  }
+  const d = new Date(ymd);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Parse YYYY-MM-DD as local calendar end-of-day. */
+function parseYmdLocalEnd(ymd: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd).trim());
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 23, 59, 59, 999);
+  }
+  const d = new Date(ymd);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
 export interface OrderExportFilters {
   createdAtFrom?: string;
   createdAtTo?: string;
@@ -60,12 +82,10 @@ export class OrderExportService {
     if (filters.createdAtFrom || filters.createdAtTo) {
       where.createdAt = {};
       if (filters.createdAtFrom) {
-        where.createdAt.gte = new Date(filters.createdAtFrom);
+        where.createdAt.gte = parseYmdLocalStart(filters.createdAtFrom);
       }
       if (filters.createdAtTo) {
-        const end = new Date(filters.createdAtTo);
-        end.setHours(23, 59, 59, 999);
-        where.createdAt.lte = end;
+        where.createdAt.lte = parseYmdLocalEnd(filters.createdAtTo);
       }
     }
 

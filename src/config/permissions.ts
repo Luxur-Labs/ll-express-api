@@ -106,6 +106,9 @@ export function isAdminRole(role: Role): role is AdminRole {
 
 export function hasPermission(role: Role, permission: Permission): boolean {
   if (role === 'SUPER_ADMIN') return true;
+  if (role === 'CLINIC') {
+    return permission === 'orders.view' || permission === 'billing.view';
+  }
   if (!isAdminRole(role)) return false;
   return ROLE_PERMISSIONS[role].includes(permission);
 }

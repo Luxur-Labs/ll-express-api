@@ -13,6 +13,7 @@ enum Role {
   FRONT_OFFICE
   DOCTOR
   EMPLOYEE
+  CLINIC
 }
 
 
@@ -45,6 +46,9 @@ model User {
   contact               String?
   document              String?
   profilePhoto          String?
+  /** Portal login for clinic users (WhatsApp OTP / password). */
+  clinicId              String?           @unique
+  clinic                Clinic?           @relation("ClinicPortalUser", fields: [clinicId], references: [id], onDelete: SetNull)
   
   // Relations
   ordersAsDoctor        Order[]           @relation("OrderDoctor")
@@ -109,6 +113,7 @@ model Clinic {
   orders          Order[]
   billingInvoices BillingInvoice[]
   billingLedger   BillingLedgerEntry[]
+  portalUser      User?    @relation("ClinicPortalUser")
   createdById     String?
   updatedById     String?
   createdBy       User?    @relation("ClinicCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -116,6 +121,20 @@ model Clinic {
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model OtpChallenge {
+  id         String    @id @default(uuid())
+  phoneE164  String
+  clinicId   String?
+  purpose    String
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phoneE164, purpose, createdAt])
 }
 
 enum BillingPeriodType {

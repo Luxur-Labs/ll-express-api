@@ -2,11 +2,12 @@ import { Router } from 'express';
 
 import { healthController } from '../controllers/health.controller'; 
 import { getDoctorsListController } from '../controllers/user.controller';
-import { getDashboardController, exportTodayOrdersReportController } from '../controllers/dashboard.controller';
+import { getDashboardController, getSalesSummaryController, exportTodayOrdersReportController, exportOrdersReportController } from '../controllers/dashboard.controller';
 import { authenticate, authorizeRoles } from '../middleware/auth.middleware';
 import { ADMIN_ROLES } from '../config/permissions';
 
 import clinicRoutes from './clinic.routes';
+import clinicPortalRoutes from './clinicPortal.routes';
 import productRoutes from './product.routes';
 import patientRoutes from './patient.routes';
 import orderRoutes from './order.routes';
@@ -26,6 +27,13 @@ router.get('/health', healthController);
 
 // Dashboard — all admin profiles
 router.get('/dashboard', authenticate, authorizeRoles(...adminRoles), getDashboardController);
+router.get('/dashboard/sales', authenticate, authorizeRoles(...adminRoles), getSalesSummaryController);
+router.get(
+  '/dashboard/orders-report',
+  authenticate,
+  authorizeRoles(...adminRoles),
+  exportOrdersReportController,
+);
 router.get(
   '/dashboard/today-orders-report',
   authenticate,
@@ -51,6 +59,7 @@ router.get('/doctors/list', authenticate, authorizeRoles(...adminRoles), getDoct
 
 // Other entity routes
 router.use('/clinics', clinicRoutes);
+router.use('/clinic-portal', clinicPortalRoutes);
 router.use('/products', productRoutes);
 router.use('/patients', patientRoutes);
 router.use('/orders', orderRoutes);

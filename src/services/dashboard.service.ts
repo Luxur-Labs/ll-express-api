@@ -1,6 +1,7 @@
 import { prisma } from '../utils/prisma';
 import {
   endOfToday,
+  formatYmd,
   startOfToday,
   sumOrdersSales,
 } from '../utils/orderSales.util';
@@ -287,4 +288,64 @@ export class DashboardService {
       }
     };
   }
+
+  /**
+   * Sales + order count for a createdAt date range (inclusive calendar days, local server time).
+   * Omit both dates → all-time totals.
+   */
+  async getSalesSummary(input: { from?: string; to?: string } = {}): Promise<{
+    sales: number;
+    orderCount: number;
+    from: string | null;
+    to: string | null;
+  }> {
+    const where: Record<string, unknown> = {
+      ...ACTIVE_ENTITY_FILTER,
+    };
+
+    let from: string | null = null;
+    let to: string | null = null;
+
+    if (input.from || input.to) {
+      const fromDate = parseYmdStart(input.from || input.to!);
+      const toDate = parseYmdEnd(input.to || input.from!);
+      if (fromDate > toDate) {
+        throw new Error('from date must be on or before to date');
+      }
+      where.createdAt = { gte: fromDate, lte: toDate };
+      from = formatYmd(fromDate);
+      to = formatYmd(toDate);
+    }
+
+    const [orderCount, orders] = await Promise.all([
+      prisma.order.count({ where: where as any }),
+      prisma.order.findMany({
+        where: where as any,
+        include: orderSalesInclude,
+      }),
+    ]);
+
+    return {
+      sales: sumOrdersSales(orders),
+      orderCount,
+      from,
+      to,
+    };
+  }
+}
+
+function parseYmdStart(ymd: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd).trim());
+  if (!m) throw new Error('Invalid from/to date. Use YYYY-MM-DD.');
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0);
+  if (Number.isNaN(d.getTime())) throw new Error('Invalid from/to date. Use YYYY-MM-DD.');
+  return d;
+}
+
+function parseYmdEnd(ymd: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd).trim());
+  if (!m) throw new Error('Invalid from/to date. Use YYYY-MM-DD.');
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 23, 59, 59, 999);
+  if (Number.isNaN(d.getTime())) throw new Error('Invalid from/to date. Use YYYY-MM-DD.');
+  return d;
 }

@@ -282,7 +282,22 @@ export const ordersListQuerySchema = z.object({
     createdAtTo: z.string().datetime('Invalid createdAtTo date format').optional(),
     
     // Sorting
-    sortBy: z.enum(['createdAt', 'schedule', 'estimateDate', 'dateOfApproach', 'invoiceNumber', 'status']).optional(),
+    sortBy: z
+      .enum([
+        'id',
+        'createdAt',
+        'schedule',
+        'estimateDate',
+        'dateOfApproach',
+        'invoiceNumber',
+        'status',
+        'patientName',
+        'doctorName',
+        'clinicName',
+        'productDetails',
+        'totalBill',
+      ])
+      .optional(),
     sortOrder: z.enum(['asc', 'desc']).optional(),
   }),
   params: z.object({}).optional(),
