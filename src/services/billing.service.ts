@@ -225,13 +225,13 @@ export class BillingService {
       where: {
         clinicId,
         isActive: true,
-        estimateDate: { gte: dateFrom, lte: dateTo },
+        createdAt: { gte: dateFrom, lte: dateTo },
       },
       include: {
         patient: true,
         orderProducts: { include: { product: true } },
       },
-      orderBy: { estimateDate: 'asc' },
+      orderBy: { createdAt: 'asc' },
     });
 
     let sortOrder = 0;
@@ -510,13 +510,14 @@ export class BillingService {
     const orders = await tx.order.findMany({
       where: {
         clinicId,
-        estimateDate: { gte: dateFrom, lte: dateTo },
+        isActive: true,
+        createdAt: { gte: dateFrom, lte: dateTo },
       },
       include: {
         patient: true,
         orderProducts: { include: { product: true } },
       },
-      orderBy: { estimateDate: 'asc' },
+      orderBy: { createdAt: 'asc' },
     });
 
     let sortOrder = 0;
