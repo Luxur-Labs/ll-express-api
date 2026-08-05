@@ -137,7 +137,7 @@ function invoiceLineFromOrderProduct(
   order: {
     id: string;
     invoiceNumber: string;
-    estimateDate: Date;
+    createdAt: Date;
     patient: { name: string };
   },
   sortOrder: number
@@ -154,7 +154,7 @@ function invoiceLineFromOrderProduct(
     orderId: order.id,
     orderProductId: op.id,
     voucherNo: order.invoiceNumber,
-    deliveryDate: order.estimateDate,
+    deliveryDate: order.createdAt,
     patientName: order.patient.name,
     productDescription: desc,
     toothNo: op.unitNumbers || '',
