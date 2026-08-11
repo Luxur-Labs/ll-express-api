@@ -5,6 +5,7 @@ import { orderExportService } from '../services/orderExport.service';
 import type { AuthUser } from '../types/auth';
 import { prisma } from '../utils/prisma';
 import { parseExportFormat, sendSpreadsheetExport } from '../utils/spreadsheetExport.util';
+import { parseOrderImportUpdateColumns } from '../config/orderImportUpdateColumns';
 
 async function resolveImportedByEmail(user?: AuthUser): Promise<string | undefined> {
   if (user?.email) return user.email;
@@ -19,7 +20,9 @@ async function resolveImportedByEmail(user?: AuthUser): Promise<string | undefin
 export async function validateOrderImportController(req: Request, res: Response) {
   try {
     const { rows } = req.body;
-    const result = await orderImportService.validateRows(rows);
+    const updateColumns = parseOrderImportUpdateColumns(req.query.columns ?? req.body?.columns);
+    const createdDateOnly = String(req.query.mode || '') === 'createdDate';
+    const result = await orderImportService.validateRows(rows, { createdDateOnly, updateColumns });
     return res.status(200).json({ data: result });
   } catch (error: unknown) {
     console.error('Order import validate error:', error);
@@ -55,7 +58,12 @@ export async function previewOrderImportFileController(req: Request, res: Respon
       return res.status(400).json({ message: 'No file uploaded. Send the spreadsheet as multipart field "file".' });
     }
 
-    const result = await orderImportService.previewFromFile(file.buffer, file.originalname);
+    const updateColumns = parseOrderImportUpdateColumns(req.query.columns ?? req.body?.columns);
+    const createdDateOnly = String(req.query.mode || req.body?.mode || '') === 'createdDate';
+    const result = await orderImportService.previewFromFile(file.buffer, file.originalname, {
+      createdDateOnly,
+      updateColumns,
+    });
     return res.status(200).json({ data: result });
   } catch (error: unknown) {
     console.error('Order import preview error:', error);
@@ -76,12 +84,15 @@ export async function uploadOrderImportFileController(req: Request, res: Respons
     const page = Number(req.query.page) || 0;
     const limit = Number(req.query.limit) || 20;
 
+    const updateColumns = parseOrderImportUpdateColumns(req.query.columns ?? req.body?.columns);
+    const createdDateOnly = String(req.query.mode || req.body?.mode || '') === 'createdDate';
     const result = await orderImportService.importFromFile(
       file.buffer,
       file.originalname,
       { fileName: file.originalname, importedByEmail, importedByUserId: user?.id },
       page,
-      limit
+      limit,
+      { createdDateOnly, updateColumns },
     );
 
     return res.status(200).json({

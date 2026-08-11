@@ -148,6 +148,7 @@ export const createOrderSchema = z.object({
     referredDoctorId: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
     referenceName: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Reference name too long').optional()),
     partner: stringSchema('Partner is required', 255),
+    createdDate: z.preprocess((val) => val === null || val === '' ? undefined : val, z.string().datetime('Invalid created date format').optional()),
     estimateDate: z.preprocess((val) => val === null ? undefined : val, z.string().datetime('Invalid estimate date format')),
     scanningMode: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Scanning mode too long').optional()),
     schedule: z.preprocess((val) => val === null || val === '' ? undefined : val, z.string().datetime('Invalid schedule date format').optional()),
@@ -190,6 +191,7 @@ export const updateOrderSchema = z.object({
     scanningMode: z.preprocess((val) => val === null ? undefined : val, z.string().max(255, 'Scanning mode too long').optional()),
     schedule: z.preprocess((val) => val === null || val === '' ? undefined : val, z.string().optional()),
     enterRemark: z.preprocess((val) => val === null ? undefined : val, z.string().optional()),
+    createdDate: z.preprocess((val) => val === null || val === '' ? undefined : val, z.string().datetime('Invalid created date format').optional()),
     estimateDate: z.preprocess((val) => val === null ? undefined : val, z.string().datetime('Invalid estimate date format').optional()),
     dateOfApproach: z.preprocess((val) => val === null || val === '' ? undefined : val, z.string().optional()),
     status: z.enum(ORDER_STATUSES).optional(),
@@ -280,12 +282,15 @@ export const ordersListQuerySchema = z.object({
     dateOfApproachTo: z.string().datetime('Invalid dateOfApproachTo date format').optional(),
     createdAtFrom: z.string().datetime('Invalid createdAtFrom date format').optional(),
     createdAtTo: z.string().datetime('Invalid createdAtTo date format').optional(),
+    createdDateFrom: z.string().datetime('Invalid createdDateFrom date format').optional(),
+    createdDateTo: z.string().datetime('Invalid createdDateTo date format').optional(),
     
     // Sorting
     sortBy: z
       .enum([
         'id',
         'createdAt',
+        'createdDate',
         'schedule',
         'estimateDate',
         'dateOfApproach',

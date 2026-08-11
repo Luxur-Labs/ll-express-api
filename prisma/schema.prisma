@@ -279,6 +279,7 @@ model Order {
   scanningMode    String?
   schedule        DateTime?
   enterRemark     String?
+  createdDate     DateTime
   estimateDate    DateTime
   dateOfApproach  DateTime?
   status          String @default("NEW")
@@ -297,6 +298,8 @@ model Order {
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([createdDate])
 }
 
 model OrderProduct {

@@ -19,6 +19,7 @@ export async function createOrderController(req: Request, res: Response) {
       referredDoctorId,
       referenceName,
       partner,
+      createdDate,
       estimateDate,
       scanningMode,
       schedule,
@@ -93,6 +94,7 @@ export async function createOrderController(req: Request, res: Response) {
       referredDoctorId,
       referenceName,
       partner,
+      createdDate: createdDate ? new Date(createdDate) : undefined,
       estimateDate: new Date(estimateDate),
       scanningMode: scanningMode ?? undefined,
       schedule: schedule ? new Date(schedule) : undefined,
@@ -190,6 +192,8 @@ export async function getOrdersListController(req: Request, res: Response) {
       dateOfApproachTo,
       createdAtFrom,
       createdAtTo,
+      createdDateFrom,
+      createdDateTo,
       sortBy,
       sortOrder,
     } = req.query;
@@ -226,6 +230,8 @@ export async function getOrdersListController(req: Request, res: Response) {
       dateOfApproachTo: dateOfApproachTo as string | undefined,
       createdAtFrom: createdAtFrom as string | undefined,
       createdAtTo: createdAtTo as string | undefined,
+      createdDateFrom: createdDateFrom as string | undefined,
+      createdDateTo: createdDateTo as string | undefined,
       sortBy: sortBy as string | undefined,
       sortOrder: sortOrder as 'asc' | 'desc' | undefined,
     });
@@ -261,6 +267,7 @@ export async function updateOrderController(req: Request, res: Response) {
       scanningMode,
       schedule,
       enterRemark,
+      createdDate,
       estimateDate,
       dateOfApproach,
       status,
@@ -360,6 +367,9 @@ export async function updateOrderController(req: Request, res: Response) {
     if (scanningMode !== undefined) updateData.scanningMode = scanningMode;
     if (schedule !== undefined && schedule !== null && schedule !== '') updateData.schedule = new Date(schedule);
     if (enterRemark !== undefined) updateData.enterRemark = enterRemark;
+    if (createdDate !== undefined && createdDate !== null && createdDate !== '') {
+      updateData.createdDate = new Date(createdDate);
+    }
     if (estimateDate !== undefined) updateData.estimateDate = new Date(estimateDate);
     if (dateOfApproach !== undefined && dateOfApproach !== null && dateOfApproach !== '') updateData.dateOfApproach = new Date(dateOfApproach);
     if (status !== undefined) updateData.status = status;

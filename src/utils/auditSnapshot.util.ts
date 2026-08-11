@@ -83,6 +83,7 @@ export const ORDER_AUDIT_FIELDS = [
   'scanningMode',
   'schedule',
   'enterRemark',
+  'createdDate',
   'estimateDate',
   'dateOfApproach',
   'status',

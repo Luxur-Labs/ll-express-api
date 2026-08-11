@@ -137,7 +137,7 @@ function invoiceLineFromOrderProduct(
   order: {
     id: string;
     invoiceNumber: string;
-    createdAt: Date;
+    createdDate: Date;
     patient: { name: string };
   },
   sortOrder: number
@@ -154,7 +154,7 @@ function invoiceLineFromOrderProduct(
     orderId: order.id,
     orderProductId: op.id,
     voucherNo: order.invoiceNumber,
-    deliveryDate: order.createdAt,
+    deliveryDate: order.createdDate,
     patientName: order.patient.name,
     productDescription: desc,
     toothNo: op.unitNumbers || '',
@@ -225,13 +225,13 @@ export class BillingService {
       where: {
         clinicId,
         isActive: true,
-        createdAt: { gte: dateFrom, lte: dateTo },
+        createdDate: { gte: dateFrom, lte: dateTo },
       },
       include: {
         patient: true,
         orderProducts: { include: { product: true } },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdDate: 'asc' },
     });
 
     let sortOrder = 0;
@@ -511,13 +511,13 @@ export class BillingService {
       where: {
         clinicId,
         isActive: true,
-        createdAt: { gte: dateFrom, lte: dateTo },
+        createdDate: { gte: dateFrom, lte: dateTo },
       },
       include: {
         patient: true,
         orderProducts: { include: { product: true } },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdDate: 'asc' },
     });
 
     let sortOrder = 0;

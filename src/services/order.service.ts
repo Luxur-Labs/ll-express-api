@@ -170,6 +170,8 @@ function buildOrdersListPrismaOrderBy(
       return { clinic: { doctorName: sortOrder } };
     case 'clinicName':
       return { clinic: { clinicName: sortOrder } };
+    case 'createdDate':
+      return { createdDate: sortOrder };
     case 'createdAt':
     default:
       return { createdAt: sortOrder };
@@ -285,6 +287,7 @@ export interface CreateOrderData {
   referredDoctorId?: string;
   referenceName?: string;
   partner: string;
+  createdDate?: Date;
   estimateDate: Date;
   scanningMode?: string;
   schedule?: Date;
@@ -307,6 +310,7 @@ export interface UpdateOrderData {
   scanningMode?: string;
   schedule?: Date;
   enterRemark?: string;
+  createdDate?: Date;
   estimateDate?: Date;
   dateOfApproach?: Date;
   status?: OrderStatusType;
@@ -412,6 +416,7 @@ export class OrderService {
         clinicId: data.clinicId,
         referredDoctorId: data.referredDoctorId,
         partner: data.partner,
+        createdDate: data.createdDate ?? new Date(),
         estimateDate: data.estimateDate,
         scanningMode: data.scanningMode ?? null,
         schedule: data.schedule ?? null,
@@ -719,6 +724,8 @@ export class OrderService {
     dateOfApproachTo?: string;
     createdAtFrom?: string;
     createdAtTo?: string;
+    createdDateFrom?: string;
+    createdDateTo?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
   }) {
@@ -850,6 +857,12 @@ export class OrderService {
       if (filters.createdAtFrom) whereClause.createdAt.gte = new Date(filters.createdAtFrom);
       if (filters.createdAtTo) whereClause.createdAt.lte = new Date(filters.createdAtTo);
     }
+
+    if (filters.createdDateFrom || filters.createdDateTo) {
+      whereClause.createdDate = {};
+      if (filters.createdDateFrom) whereClause.createdDate.gte = new Date(filters.createdDateFrom);
+      if (filters.createdDateTo) whereClause.createdDate.lte = new Date(filters.createdDateTo);
+    }
     
     // Search filter (searches across invoiceNumber, patient name, clinic doctor name, clinic name)
     if (filters.search) {
@@ -909,7 +922,8 @@ export class OrderService {
         schedule: order.schedule ? order.schedule.getTime() : null,
         estimateDate: order.estimateDate.getTime(),
         dateOfApproach: order.dateOfApproach ? order.dateOfApproach.getTime() : null,
-        createdOn: order.createdAt.getTime(),
+        createdDate: (order.createdDate ?? order.createdAt)?.getTime?.() ?? null,
+        createdOn: (order.createdAt ?? order.createdDate)?.getTime?.() ?? null,
         amount: totalBill,
         totalBill,
         assignedGroup: null,
@@ -1095,6 +1109,7 @@ export class OrderService {
     if (data.scanningMode !== undefined) updateData.scanningMode = data.scanningMode;
     if (data.schedule !== undefined) updateData.schedule = data.schedule || null;
     if (data.enterRemark !== undefined) updateData.enterRemark = data.enterRemark;
+    if (data.createdDate !== undefined) updateData.createdDate = data.createdDate;
     if (data.estimateDate !== undefined) updateData.estimateDate = data.estimateDate;
     if (data.dateOfApproach !== undefined) updateData.dateOfApproach = data.dateOfApproach || null;
     if (data.status !== undefined) updateData.status = data.status;

@@ -118,7 +118,7 @@ export class OrderExportService {
 
     return [
       isFirstLine ? order.invoiceNumber : blank,
-      isFirstLine ? formatSheetDate(order.createdAt) : blank,
+      isFirstLine ? formatSheetDate(order.createdDate) : blank,
       isFirstLine ? order.patient.name : blank,
       isFirstLine ? order.patient.age : blank,
       isFirstLine ? order.patient.gender : blank,

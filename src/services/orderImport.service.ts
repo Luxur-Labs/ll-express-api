@@ -1,6 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 
-import { CreateOrderData, OrderService } from './order.service';
+import { CreateOrderData, CreatePatientData, OrderService, UpdateOrderData } from './order.service';
 import {
   hasOrderIdMapping,
   looksLikeClinicSheetHeaders,
@@ -9,7 +9,10 @@ import {
 import { isCancelledOrderStatus } from '../utils/orderStatus';
 import { normalizeProductCode, productCodeLookupKey } from '../utils/productCode.util';
 import { normalizeToothNumberString } from '../utils/toothNumber.util';
-
+import {
+  OrderImportUpdateColumn,
+  orderImportUpdateColumnLabels,
+} from '../config/orderImportUpdateColumns';
 const prisma = new PrismaClient();
 const orderService = new OrderService();
 
@@ -106,6 +109,10 @@ export type OrderImportReviewItem = {
   statusUpdateOnly?: boolean;
   /** Existing order in DB — import will update tooth numbers on product lines only. */
   toothNumberUpdateOnly?: boolean;
+  /** Existing order in DB — import will update createdDate only (matched by Order ID). */
+  createdDateUpdateOnly?: boolean;
+  /** Existing order — update only these columns (matched by Order ID). */
+  updateColumns?: OrderImportUpdateColumn[];
 };
 
 export type OrderImportValidateResult = {
@@ -132,6 +139,8 @@ export type OrderImportCommitItem = {
   partner?: string;
   statusUpdateOnly?: boolean;
   toothNumberUpdateOnly?: boolean;
+  createdDateUpdateOnly?: boolean;
+  updateColumns?: OrderImportUpdateColumn[];
   products: {
     productId: string;
     productCode?: string;
@@ -164,7 +173,7 @@ export type OrderImportPreviewRow = {
   patientName?: string;
   clinicName?: string;
   productCount: number;
-  status: 'READY' | 'NEEDS_REVIEW' | 'SKIPPED' | 'MISSING_ORDER_ID' | 'DUPLICATE_ORDER' | 'STATUS_UPDATE' | 'TOOTH_NUMBER_UPDATE';
+  status: 'READY' | 'NEEDS_REVIEW' | 'SKIPPED' | 'MISSING_ORDER_ID' | 'DUPLICATE_ORDER' | 'STATUS_UPDATE' | 'TOOTH_NUMBER_UPDATE' | 'CREATED_DATE_UPDATE' | 'COLUMN_UPDATE';
   issues?: string;
   importable: boolean;
   fixDraft?: OrderImportReviewItem;
@@ -177,7 +186,7 @@ export type OrderImportSheetRowTrace = {
   patientName?: string;
   clinicName?: string;
   productCode?: string;
-  status: 'READY' | 'NEEDS_REVIEW' | 'SKIPPED' | 'MISSING_ORDER_ID' | 'DUPLICATE_ORDER' | 'STATUS_UPDATE' | 'TOOTH_NUMBER_UPDATE';
+  status: 'READY' | 'NEEDS_REVIEW' | 'SKIPPED' | 'MISSING_ORDER_ID' | 'DUPLICATE_ORDER' | 'STATUS_UPDATE' | 'TOOTH_NUMBER_UPDATE' | 'CREATED_DATE_UPDATE' | 'COLUMN_UPDATE';
   issues?: string;
 };
 
@@ -194,6 +203,8 @@ export type OrderImportPreviewResult = {
     duplicateOrders: number;
     statusUpdates: number;
     toothNumberUpdates: number;
+    createdDateUpdates: number;
+    columnUpdates: number;
     missingOrderId: number;
     rowsWithoutOrderId: number;
     totalOrders: number;
@@ -256,6 +267,47 @@ function parseOptionalNumber(v: unknown): number | undefined {
 }
 
 function reviewItemToCommit(item: OrderImportReviewItem): OrderImportCommitItem {
+  if (item.updateColumns?.length) {
+    return {
+      orderId: item.orderId,
+      updateColumns: item.updateColumns,
+      createdDateUpdateOnly:
+        item.updateColumns.length === 1 && item.updateColumns[0] === 'createdDate',
+      date: item.data.date,
+      expectedDate: item.data.expectedDate || new Date().toISOString(),
+      deliveryDate: item.data.deliveryDate,
+      caseStatus: item.data.caseStatus,
+      partner: item.data.partner,
+      reference: item.data.reference,
+      patientName: item.data.patientName || '—',
+      patientAge: resolvePatientAge(item.data.patientAge),
+      patientGender: resolvePatientGender(item.data.patientGender),
+      clinicId: item.data.clinicId || 'column-update',
+      products: item.updateColumns.includes('toothNumber')
+        ? item.data.products
+            .filter((p) => !!p.productId && !!p.toothNumber)
+            .map((p) => ({
+              productId: p.productId!,
+              productCode: p.productCode,
+              toothNumber: p.toothNumber,
+            }))
+        : [],
+    };
+  }
+
+  if (item.createdDateUpdateOnly) {
+    return {
+      orderId: item.orderId,
+      createdDateUpdateOnly: true,
+      updateColumns: ['createdDate'],
+      date: item.data.date,
+      patientName: item.data.patientName || '—',
+      clinicId: item.data.clinicId || 'created-date-update',
+      expectedDate: new Date().toISOString(),
+      products: [],
+    };
+  }
+
   if (item.toothNumberUpdateOnly) {
     return {
       orderId: item.orderId,
@@ -578,11 +630,17 @@ function buildSheetRowTrace(
   };
 
   for (const item of validation.ready) {
-    const status = item.toothNumberUpdateOnly
-      ? 'TOOTH_NUMBER_UPDATE'
-      : item.statusUpdateOnly
-        ? 'STATUS_UPDATE'
-        : 'READY';
+    const status = item.updateColumns?.length
+      ? item.updateColumns.length === 1 && item.updateColumns[0] === 'createdDate'
+        ? 'CREATED_DATE_UPDATE'
+        : 'COLUMN_UPDATE'
+      : item.createdDateUpdateOnly
+        ? 'CREATED_DATE_UPDATE'
+        : item.toothNumberUpdateOnly
+          ? 'TOOTH_NUMBER_UPDATE'
+          : item.statusUpdateOnly
+            ? 'STATUS_UPDATE'
+            : 'READY';
     register(item.rowIndices, status, item.orderId);
   }
   for (const item of validation.needsReview) {
@@ -618,8 +676,24 @@ function buildSheetRowTrace(
   });
 }
 
+export type OrderImportValidateOptions = {
+  /** Match by Order ID and update createdDate only. Does not create orders. */
+  createdDateOnly?: boolean;
+  /** Match by Order ID and update only these columns. Does not create orders. */
+  updateColumns?: OrderImportUpdateColumn[];
+};
+
+function resolveUpdateColumns(options: OrderImportValidateOptions): OrderImportUpdateColumn[] {
+  if (options.updateColumns?.length) return options.updateColumns;
+  if (options.createdDateOnly) return ['createdDate'];
+  return [];
+}
+
 export class OrderImportService {
-  async validateRows(rows: OrderImportSheetRow[]): Promise<OrderImportValidateResult> {
+  async validateRows(
+    rows: OrderImportSheetRow[],
+    options: OrderImportValidateOptions = {},
+  ): Promise<OrderImportValidateResult> {
     const clinics = await prisma.clinic.findMany({
       select: { id: true, clinicName: true, clientAddress: true },
     });
@@ -672,6 +746,130 @@ export class OrderImportService {
       const rowErrors = validateSameOrderRowErrors(groupRows);
       const rawCaseStatus = resolveRawCaseStatus(groupRows);
       const caseStatus = normalizeStatus(rawCaseStatus);
+
+      const updateColumns = resolveUpdateColumns(options);
+      if (updateColumns.length) {
+        const header = groupRows[0];
+        const errors = [...rowErrors];
+        const missingFields: string[] = [];
+        const selected = new Set(updateColumns);
+
+        if (!orderExistsInSystem) {
+          errors.push(
+            `Order ID "${orderId}" was not found. Column update only changes existing orders.`,
+          );
+        }
+
+        const dateRaw =
+          trimVal(header.date) || trimVal(groupRows.find((r) => trimVal(r.date))?.date);
+        const dateIso = parseDateToIso(dateRaw);
+        if (selected.has('createdDate')) {
+          if (!dateRaw) missingFields.push('date');
+          else if (!dateIso) errors.push(`Invalid Date "${dateRaw}".`);
+        }
+
+        const expectedRaw =
+          trimVal(header.expectedDate) ||
+          trimVal(groupRows.find((r) => trimVal(r.expectedDate))?.expectedDate);
+        const expectedIso = parseDateToIso(expectedRaw);
+        if (selected.has('estimateDate')) {
+          if (!expectedRaw) missingFields.push('expectedDate');
+          else if (!expectedIso) errors.push(`Invalid Expected Date "${expectedRaw}".`);
+        }
+
+        const deliveryRaw =
+          trimVal(header.deliveryDate) ||
+          trimVal(groupRows.find((r) => trimVal(r.deliveryDate))?.deliveryDate);
+        const deliveryIso = parseDateToIso(deliveryRaw);
+        if (selected.has('schedule')) {
+          if (!deliveryRaw) missingFields.push('deliveryDate');
+          else if (!deliveryIso) errors.push(`Invalid Delivery Date "${deliveryRaw}".`);
+        }
+
+        if (selected.has('status')) {
+          if (!rawCaseStatus) missingFields.push('caseStatus');
+          else if (caseStatus === 'NEW') {
+            errors.push(`Unrecognized Case Status "${rawCaseStatus}".`);
+          }
+        }
+
+        if (selected.has('partner') && !trimVal(header.partner)) {
+          missingFields.push('partner');
+        }
+        if (selected.has('reference') && !trimVal(header.reference)) {
+          missingFields.push('reference');
+        }
+        if (selected.has('patientName') && !trimVal(header.patientName)) {
+          missingFields.push('patientName');
+        }
+        if (selected.has('patientGender') && !trimVal(header.patientGender)) {
+          missingFields.push('patientGender');
+        }
+        if (selected.has('patientAge')) {
+          const ageRaw = header.patientAge;
+          if (ageRaw === undefined || ageRaw === null || trimVal(ageRaw) === '') {
+            missingFields.push('patientAge');
+          } else if (!Number.isFinite(parseInt(String(ageRaw), 10))) {
+            errors.push('Invalid patient age');
+          }
+        }
+
+        let productDrafts: OrderImportProductDraft[] = [];
+        if (selected.has('toothNumber')) {
+          productDrafts = buildProductDraftsFromGroupRows(groupRows, productByCode, {
+            isCancelled: false,
+            forToothUpdate: true,
+          });
+          const toothProducts = productDrafts.filter((p) => p.toothNumber && p.productId);
+          if (!toothProducts.length) {
+            missingFields.push('toothNumber');
+          }
+          errors.push(
+            ...productDrafts.flatMap((p) => p.errors.map((e) => `Row ${p.rowIndex}: ${e}`)),
+          );
+          missingFields.push(
+            ...productDrafts.flatMap((p) =>
+              p.missingFields.map((f) => `Row ${p.rowIndex}: ${f}`),
+            ),
+          );
+        }
+
+        const item: OrderImportReviewItem = {
+          orderId,
+          rowIndices,
+          updateColumns,
+          createdDateUpdateOnly: updateColumns.length === 1 && updateColumns[0] === 'createdDate',
+          data: {
+            orderId,
+            invoiceNumber: orderId,
+            date: dateIso ?? (dateRaw || undefined),
+            expectedDate: expectedIso ?? (expectedRaw || undefined),
+            deliveryDate: deliveryIso ?? (deliveryRaw || undefined),
+            caseStatus,
+            partner: trimVal(header.partner) || undefined,
+            reference: trimVal(header.reference) || undefined,
+            patientName: trimVal(header.patientName) || undefined,
+            patientAge: header.patientAge,
+            patientGender: trimVal(header.patientGender) || undefined,
+            products: productDrafts,
+          },
+          errors,
+          missingFields,
+          canImport: false,
+          duplicateOrder: rowErrors.length > 0,
+        };
+        item.canImport =
+          item.errors.length === 0 &&
+          item.missingFields.length === 0 &&
+          orderExistsInSystem;
+
+        if (item.canImport) {
+          ready.push(item);
+        } else {
+          needsReview.push(item);
+        }
+        continue;
+      }
 
       if (orderExistsInSystem) {
         const errors = [...rowErrors];
@@ -891,7 +1089,30 @@ export class OrderImportService {
   private async applyImportCommit(
     order: OrderImportCommitItem,
     actorUserId?: string,
-  ): Promise<'CREATED' | 'STATUS_UPDATED' | 'TOOTH_NUMBERS_UPDATED'> {
+  ): Promise<
+    | 'CREATED'
+    | 'STATUS_UPDATED'
+    | 'TOOTH_NUMBERS_UPDATED'
+    | 'CREATED_DATE_UPDATED'
+    | 'COLUMNS_UPDATED'
+  > {
+    const updateColumns = order.updateColumns?.length
+      ? order.updateColumns
+      : order.createdDateUpdateOnly
+        ? (['createdDate'] as OrderImportUpdateColumn[])
+        : [];
+    if (updateColumns.length) {
+      await this.updateOrderColumnsFromImport(order, updateColumns, actorUserId);
+      return updateColumns.length === 1 && updateColumns[0] === 'createdDate'
+        ? 'CREATED_DATE_UPDATED'
+        : 'COLUMNS_UPDATED';
+    }
+
+    if (order.createdDateUpdateOnly) {
+      await this.updateOrderCreatedDateFromImport(order, actorUserId);
+      return 'CREATED_DATE_UPDATED';
+    }
+
     if (order.toothNumberUpdateOnly) {
       await this.updateOrderToothNumbersFromImport(order);
       return 'TOOTH_NUMBERS_UPDATED';
@@ -913,6 +1134,119 @@ export class OrderImportService {
 
     await this.createOrderFromCommit(order, actorUserId);
     return 'CREATED';
+  }
+
+  private async updateOrderColumnsFromImport(
+    order: OrderImportCommitItem,
+    columns: OrderImportUpdateColumn[],
+    actorUserId?: string,
+  ): Promise<void> {
+    const orderId = trimVal(order.orderId);
+    if (!orderId) throw new Error('Order ID is required to update columns');
+
+    const existing = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { patient: true },
+    });
+    if (!existing) {
+      throw new Error(`Order ID "${orderId}" was not found`);
+    }
+
+    const selected = new Set(columns);
+    const updateData: UpdateOrderData = {};
+
+    if (selected.has('createdDate')) {
+      const dateIso = parseDateToIso(order.date) ?? (trimVal(order.date) || undefined);
+      if (!dateIso) throw new Error('A valid Date is required');
+      updateData.createdDate = new Date(dateIso);
+    }
+    if (selected.has('estimateDate')) {
+      const iso = parseDateToIso(order.expectedDate) ?? (trimVal(order.expectedDate) || undefined);
+      if (!iso) throw new Error('A valid Expected Date is required');
+      updateData.estimateDate = new Date(iso);
+    }
+    if (selected.has('schedule')) {
+      const iso = parseDateToIso(order.deliveryDate) ?? (trimVal(order.deliveryDate) || undefined);
+      if (!iso) throw new Error('A valid Delivery Date is required');
+      updateData.schedule = new Date(iso);
+    }
+    if (selected.has('status')) {
+      const status = normalizeStatus(order.caseStatus) as UpdateOrderData['status'];
+      if (!order.caseStatus || !status || status === 'NEW') {
+        throw new Error('Valid Case Status is required');
+      }
+      updateData.status = status;
+    }
+    if (selected.has('partner')) {
+      const partner = trimVal(order.partner);
+      if (!partner) throw new Error('Partner is required');
+      updateData.partner = partner;
+    }
+    if (selected.has('reference')) {
+      updateData.referenceName = trimVal(order.reference) || undefined;
+    }
+
+    const wantsPatient =
+      selected.has('patientName') || selected.has('patientAge') || selected.has('patientGender');
+    if (wantsPatient) {
+      const patient: CreatePatientData = {
+        name: selected.has('patientName')
+          ? trimVal(order.patientName)
+          : existing.patient.name,
+        age: selected.has('patientAge')
+          ? resolvePatientAge(order.patientAge)
+          : existing.patient.age,
+        gender: selected.has('patientGender')
+          ? resolvePatientGender(order.patientGender)
+          : existing.patient.gender,
+      };
+      if (selected.has('patientName') && !patient.name) {
+        throw new Error('Patient Name is required');
+      }
+      updateData.patient = patient;
+    }
+
+    if (Object.keys(updateData).length) {
+      await orderService.updateOrder(
+        orderId,
+        updateData,
+        actorUserId,
+        `Updated ${orderImportUpdateColumnLabels(columns)} via import`,
+      );
+    }
+
+    if (selected.has('toothNumber')) {
+      await this.updateOrderToothNumbersFromImport(order);
+    }
+  }
+
+  private async updateOrderCreatedDateFromImport(
+    order: OrderImportCommitItem,
+    actorUserId?: string,
+  ): Promise<void> {
+    const orderId = trimVal(order.orderId);
+    const dateIso = parseDateToIso(order.date) ?? (trimVal(order.date) || undefined);
+    if (!orderId) {
+      throw new Error('Order ID is required to update created date');
+    }
+    if (!dateIso) {
+      throw new Error('A valid Date is required to update created date');
+    }
+
+    const existing = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new Error(`Order ID "${orderId}" was not found`);
+    }
+
+    await orderService.updateOrder(
+      orderId,
+      { createdDate: new Date(dateIso) },
+      actorUserId,
+      'Created date updated via import',
+    );
   }
 
   private async updateOrderToothNumbersFromImport(order: OrderImportCommitItem): Promise<void> {
@@ -1006,6 +1340,9 @@ export class OrderImportService {
       clinicId: order.clinicId,
       referenceName: order.reference,
       partner: order.partner?.trim() || 'Luxur',
+      createdDate: order.date
+        ? new Date(parseDateToIso(order.date) ?? order.date)
+        : new Date(),
       estimateDate: new Date(order.expectedDate),
       scanningMode: order.receivedThrough,
       schedule: order.deliveryDate ? new Date(order.deliveryDate) : undefined,
@@ -1052,7 +1389,11 @@ export class OrderImportService {
                   ? 'STATUS_UPDATED'
                   : result === 'TOOTH_NUMBERS_UPDATED'
                     ? 'TOOTH_NUMBERS_UPDATED'
-                    : 'CREATED',
+                    : result === 'CREATED_DATE_UPDATED'
+                      ? 'CREATED_DATE_UPDATED'
+                      : result === 'COLUMNS_UPDATED'
+                        ? 'COLUMNS_UPDATED'
+                        : 'CREATED',
               patientName: order.patientName,
               clinicName,
               productCount: order.products.length,
@@ -1102,9 +1443,13 @@ export class OrderImportService {
     return { parsed };
   }
 
-  async previewFromFile(buffer: Buffer, fileName: string): Promise<OrderImportPreviewResult> {
+  async previewFromFile(
+    buffer: Buffer,
+    fileName: string,
+    options: OrderImportValidateOptions = {},
+  ): Promise<OrderImportPreviewResult> {
     const { parsed } = this.parseAndValidate(buffer, fileName);
-    const validation = await this.validateRows(parsed.rows);
+    const validation = await this.validateRows(parsed.rows, options);
     const parsedByIndex = new Map(parsed.rows.map((r) => [r.rowIndex, r]));
 
     const rows: OrderImportPreviewRow[] = [];
@@ -1112,24 +1457,41 @@ export class OrderImportService {
 
     for (const item of validation.ready) {
       commitItems.push(reviewItemToCommit(item));
-      const previewStatus = item.toothNumberUpdateOnly
-        ? 'TOOTH_NUMBER_UPDATE'
-        : item.statusUpdateOnly
-          ? 'STATUS_UPDATE'
-          : 'READY';
+      const previewStatus = item.updateColumns?.length
+        ? item.updateColumns.length === 1 && item.updateColumns[0] === 'createdDate'
+          ? 'CREATED_DATE_UPDATE'
+          : 'COLUMN_UPDATE'
+        : item.createdDateUpdateOnly
+          ? 'CREATED_DATE_UPDATE'
+          : item.toothNumberUpdateOnly
+            ? 'TOOTH_NUMBER_UPDATE'
+            : item.statusUpdateOnly
+              ? 'STATUS_UPDATE'
+              : 'READY';
       const toothLineCount = item.data.products.filter((p) => p.toothNumber).length;
+      const isColumnUpdate = !!item.updateColumns?.length || !!item.createdDateUpdateOnly;
       rows.push({
         orderId: item.orderId,
         rowIndices: item.rowIndices,
         patientName: item.data.patientName,
         clinicName: item.data.clinicName,
-        productCount: item.toothNumberUpdateOnly ? toothLineCount : item.statusUpdateOnly ? 0 : item.data.products.length,
+        productCount: item.toothNumberUpdateOnly
+          ? toothLineCount
+          : item.statusUpdateOnly || isColumnUpdate
+            ? item.updateColumns?.includes('toothNumber')
+              ? toothLineCount
+              : 0
+            : item.data.products.length,
         status: previewStatus,
-        issues: item.toothNumberUpdateOnly
-          ? `Update tooth numbers on ${toothLineCount} product line(s)`
-          : item.statusUpdateOnly
-            ? `Update status to ${item.data.caseStatus}`
-            : undefined,
+        issues: item.updateColumns?.length
+          ? `Update ${orderImportUpdateColumnLabels(item.updateColumns)}`
+          : item.createdDateUpdateOnly
+            ? `Update created date to ${item.data.date}`
+            : item.toothNumberUpdateOnly
+              ? `Update tooth numbers on ${toothLineCount} product line(s)`
+              : item.statusUpdateOnly
+                ? `Update status to ${item.data.caseStatus}`
+                : undefined,
         importable: true,
       });
     }
@@ -1191,6 +1553,8 @@ export class OrderImportService {
     const duplicateOrders = validation.needsReview.filter((item) => item.duplicateOrder).length;
     const statusUpdates = validation.ready.filter((item) => item.statusUpdateOnly).length;
     const toothNumberUpdates = validation.ready.filter((item) => item.toothNumberUpdateOnly).length;
+    const createdDateUpdates = validation.ready.filter((item) => item.createdDateUpdateOnly).length;
+    const columnUpdates = validation.ready.filter((item) => !!item.updateColumns?.length).length;
     const sheetRowTrace = buildSheetRowTrace(parsed.rows, validation);
 
     return {
@@ -1200,12 +1564,20 @@ export class OrderImportService {
         headers: parsed.headers,
       },
       summary: {
-        ready: validation.ready.filter((item) => !item.statusUpdateOnly && !item.toothNumberUpdateOnly).length,
+        ready: validation.ready.filter(
+          (item) =>
+            !item.statusUpdateOnly &&
+            !item.toothNumberUpdateOnly &&
+            !item.createdDateUpdateOnly &&
+            !item.updateColumns?.length,
+        ).length,
         needsReview: validation.needsReview.length - duplicateOrders,
         skipped: validation.skipped.length,
         duplicateOrders,
         statusUpdates,
         toothNumberUpdates,
+        createdDateUpdates,
+        columnUpdates,
         missingOrderId,
         rowsWithoutOrderId: missingOrderId,
         totalOrders: orderCount,
@@ -1224,10 +1596,11 @@ export class OrderImportService {
     fileName: string,
     meta: OrderImportCommitMeta,
     itemsPage = 0,
-    itemsLimit = 20
+    itemsLimit = 20,
+    options: OrderImportValidateOptions = {},
   ): Promise<OrderImportFileResult> {
     const { parsed } = this.parseAndValidate(buffer, fileName);
-    const validation = await this.validateRows(parsed.rows);
+    const validation = await this.validateRows(parsed.rows, options);
     const ordersToCreate = validation.ready.map(reviewItemToCommit);
 
     const batch = await prisma.orderImportBatch.create({

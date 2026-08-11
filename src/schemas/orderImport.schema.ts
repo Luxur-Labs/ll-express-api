@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isCancelledOrderStatus } from '../utils/orderStatus';
+import { ORDER_IMPORT_UPDATE_COLUMN_KEYS } from '../config/orderImportUpdateColumns';
 
 function optionalNumber(min?: number, max?: number) {
   return z.preprocess(
@@ -87,12 +88,55 @@ const importCommitOrderSchema = z
   partner: z.string().optional(),
   statusUpdateOnly: z.boolean().optional(),
   toothNumberUpdateOnly: z.boolean().optional(),
+  createdDateUpdateOnly: z.boolean().optional(),
+  updateColumns: z.array(z.enum(ORDER_IMPORT_UPDATE_COLUMN_KEYS)).optional(),
   products: z.preprocess(
     (val) => (val === null || val === undefined ? [] : val),
     z.array(importCommitProductSchema)
   ),
 })
   .superRefine((order, ctx) => {
+    if (order.updateColumns?.length) {
+      const selected = new Set(order.updateColumns);
+      if (selected.has('createdDate') && !trimImportVal(order.date)) {
+        ctx.addIssue({ code: 'custom', message: 'Date is required', path: ['date'] });
+      }
+      if (selected.has('estimateDate') && !trimImportVal(order.expectedDate)) {
+        ctx.addIssue({ code: 'custom', message: 'Expected Date is required', path: ['expectedDate'] });
+      }
+      if (selected.has('schedule') && !trimImportVal(order.deliveryDate)) {
+        ctx.addIssue({ code: 'custom', message: 'Delivery Date is required', path: ['deliveryDate'] });
+      }
+      if (selected.has('status') && !trimImportVal(order.caseStatus)) {
+        ctx.addIssue({ code: 'custom', message: 'Case Status is required', path: ['caseStatus'] });
+      }
+      if (selected.has('partner') && !trimImportVal(order.partner)) {
+        ctx.addIssue({ code: 'custom', message: 'Partner is required', path: ['partner'] });
+      }
+      if (selected.has('patientName') && !trimImportVal(order.patientName)) {
+        ctx.addIssue({ code: 'custom', message: 'Patient Name is required', path: ['patientName'] });
+      }
+      if (selected.has('toothNumber') && order.products.length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'At least one product line with tooth numbers is required',
+          path: ['products'],
+        });
+      }
+      return;
+    }
+
+    if (order.createdDateUpdateOnly) {
+      if (!trimImportVal(order.date)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Date is required to update created date',
+          path: ['date'],
+        });
+      }
+      return;
+    }
+
     if (order.toothNumberUpdateOnly) {
       if (order.products.length === 0) {
         ctx.addIssue({
