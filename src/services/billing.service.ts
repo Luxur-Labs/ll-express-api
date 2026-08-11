@@ -8,7 +8,7 @@ export const COMPANY_HEADER = {
   name: 'Izee Medical Laboratories Pvt Ltd',
   tagLine: '(2024-25)',
   address:
-    'G3, H.No. 8-2-248, Maharshi House, Road No. 03, Nagarjuna Circle, Beside Chutney\'s, Hyderabad, 500034',
+    '304, 4th floor, CBR Ace Monte Carlo, Kondapur, Hyderabad - 500085.',
   phone: '9154159829',
   email: 'accounts@luxurdentallabs.com',
 };
