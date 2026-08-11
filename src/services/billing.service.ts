@@ -193,14 +193,34 @@ export class BillingService {
     );
   }
 
-  /** Opening balance (clinic pending) is rolled into the total only on the first non-cancelled invoice, and only when it is greater than zero. */
+  /**
+   * Previous/pending on a new invoice is the unpaid total of existing open invoices.
+   * If there are none yet (first bill), use clinic opening pending balance when it is > 0.
+   */
   private resolvePreviousBalanceForInvoice(
-    isFirst: boolean,
+    unpaidTotal: number,
     clinicPendingBalance: number
   ): number {
-    if (!isFirst) return 0;
+    const unpaid = roundMoney(unpaidTotal);
+    if (unpaid > 0) return unpaid;
     const opening = roundMoney(clinicPendingBalance);
     return opening > 0 ? opening : 0;
+  }
+
+  private async sumUnpaidInvoiceBalance(
+    clinicId: string,
+    tx?: Prisma.TransactionClient
+  ): Promise<number> {
+    const db = tx ?? prisma;
+    const open = await db.billingInvoice.findMany({
+      where: {
+        clinicId,
+        cancelledAt: null,
+        netPayable: { gt: 0 },
+      },
+      select: { netPayable: true },
+    });
+    return roundMoney(open.reduce((sum, inv) => sum + toNumber(inv.netPayable), 0));
   }
 
   private async isFirstNonCancelledInvoiceForClinic(
@@ -266,7 +286,8 @@ export class BillingService {
     const invoiceSubtotal = roundMoney(lines.reduce((s, l) => s + l.lineTotal, 0));
     const isFirst = await this.isFirstNonCancelledInvoiceForClinic(clinicId);
     const clinicPending = roundMoney(toNumber(clinic.pendingBalance));
-    const previousBalance = this.resolvePreviousBalanceForInvoice(isFirst, clinicPending);
+    const unpaidTotal = await this.sumUnpaidInvoiceBalance(clinicId);
+    const previousBalance = this.resolvePreviousBalanceForInvoice(unpaidTotal, clinicPending);
     const roundOff = 0;
     const totalPayable = roundMoney(invoiceSubtotal + roundOff + previousBalance);
     const receivedAmount = 0;
@@ -404,9 +425,9 @@ export class BillingService {
         );
       }
       const invoiceSubtotal = roundMoney(lines.reduce((s, l) => s + l.lineTotal, 0));
-      const isFirst = await this.isFirstNonCancelledInvoiceForClinic(clinicId, tx);
       const currentPending = roundMoney(toNumber(clinic.pendingBalance));
-      const previousBalance = this.resolvePreviousBalanceForInvoice(isFirst, currentPending);
+      const unpaidTotal = await this.sumUnpaidInvoiceBalance(clinicId, tx);
+      const previousBalance = this.resolvePreviousBalanceForInvoice(unpaidTotal, currentPending);
       const totalPayable = roundMoney(invoiceSubtotal + roundOff + previousBalance);
       const recv = roundMoney(Math.max(0, receivedAmount));
       const cred = roundMoney(Math.max(0, creditsAdjusted));
@@ -488,7 +509,7 @@ export class BillingService {
         });
       }
 
-      // Carry forward: first invoice may include opening balance (> 0 only); later invoices bill new charges only.
+      // Carry forward: clinic pending includes opening/unpaid plus this invoice's new charges, minus payments/credits.
       const newPending = roundMoney(currentPending - recv - cred + invoiceSubtotal + roundOff);
       await tx.clinic.update({
         where: { id: clinicId },
