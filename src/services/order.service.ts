@@ -1060,30 +1060,62 @@ export class OrderService {
       throw new Error('Order not found');
     }
 
-    // Handle patient update if provided
+    // Handle patient update if provided — prefer updating the linked patient in place
     let patientId = data.patientId;
     if (data.patient) {
       const patientData = normalizePatientData(data.patient);
-      let patient = await prisma.patient.findFirst({
-        where: {
-          name: patientData.name,
-          age: patientData.age,
-          gender: patientData.gender,
-        },
-      });
+      const linkedPatientId = data.patientId || currentOrder.patientId;
 
-      if (!patient) {
-        patient = await prisma.patient.create({
-          data: { ...patientData, ...createUserStampFields(transitionedBy) },
+      if (linkedPatientId) {
+        const linked = await prisma.patient.findUnique({ where: { id: linkedPatientId } });
+        if (linked) {
+          const patient = await prisma.patient.update({
+            where: { id: linkedPatientId },
+            data: { ...patientData, ...updateUserStampFields(transitionedBy) },
+          });
+          patientId = patient.id;
+        } else {
+          // Linked id missing — fall back to find-or-create by demographics
+          let patient = await prisma.patient.findFirst({
+            where: {
+              name: patientData.name,
+              age: patientData.age,
+              gender: patientData.gender,
+            },
+          });
+          if (!patient) {
+            patient = await prisma.patient.create({
+              data: { ...patientData, ...createUserStampFields(transitionedBy) },
+            });
+          } else {
+            patient = await prisma.patient.update({
+              where: { id: patient.id },
+              data: { ...patientData, ...updateUserStampFields(transitionedBy) },
+            });
+          }
+          patientId = patient.id;
+        }
+      } else {
+        let patient = await prisma.patient.findFirst({
+          where: {
+            name: patientData.name,
+            age: patientData.age,
+            gender: patientData.gender,
+          },
         });
-      } else if (data.patient.contactNumber !== undefined) {
-        // Update contact number if provided
-        patient = await prisma.patient.update({
-          where: { id: patient.id },
-          data: { contactNumber: data.patient.contactNumber, ...updateUserStampFields(transitionedBy) },
-        });
+
+        if (!patient) {
+          patient = await prisma.patient.create({
+            data: { ...patientData, ...createUserStampFields(transitionedBy) },
+          });
+        } else {
+          patient = await prisma.patient.update({
+            where: { id: patient.id },
+            data: { ...patientData, ...updateUserStampFields(transitionedBy) },
+          });
+        }
+        patientId = patient.id;
       }
-      patientId = patient.id;
     }
 
     // Build update data excluding nested fields
